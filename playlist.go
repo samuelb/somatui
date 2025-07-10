@@ -7,31 +7,39 @@ import (
 	"strings"
 )
 
+const plsFilePrefix = "File1="
+
 // getStreamURLFromPlaylist fetches a playlist file from a URL, parses it,
-// and returns the first stream URL found.
+// and returns the first stream URL found within the playlist.
+// It supports .pls playlist formats.
 func getStreamURLFromPlaylist(playlistURL string) (string, error) {
+	// Fetch the playlist file content
 	resp, err := http.Get(playlistURL)
 	if err != nil {
-		return "", fmt.Errorf("failed to get playlist: %w", err)
+		return "", fmt.Errorf("failed to get playlist from %s: %w", playlistURL, err)
 	}
 	defer resp.Body.Close()
 
+	// Check if the HTTP request was successful
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("unexpected status code for playlist: %d", resp.StatusCode)
+		return "", fmt.Errorf("unexpected status code %d for playlist %s", resp.StatusCode, playlistURL)
 	}
 
+	// Scan the playlist file line by line to find the stream URL
 	scanner := bufio.NewScanner(resp.Body)
 	for scanner.Scan() {
 		line := scanner.Text()
-		// .pls files have stream URLs in FileN=... format
-		if strings.HasPrefix(line, "File1=") {
-			return strings.TrimPrefix(line, "File1="), nil
+		// In .pls files, the stream URL is typically on a line starting with "File1="
+		if strings.HasPrefix(line, plsFilePrefix) {
+			return strings.TrimPrefix(line, plsFilePrefix), nil
 		}
 	}
 
+	// Check for any errors during scanning
 	if err := scanner.Err(); err != nil {
-		return "", fmt.Errorf("error reading playlist body: %w", err)
+		return "", fmt.Errorf("error reading playlist body from %s: %w", playlistURL, err)
 	}
 
-	return "", fmt.Errorf("no stream URL found in playlist")
+	// If no stream URL was found in the playlist
+	return "", fmt.Errorf("no stream URL found in playlist %s", playlistURL)
 }
