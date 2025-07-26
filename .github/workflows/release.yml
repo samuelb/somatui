@@ -18,10 +18,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get dist-upgrade -y
-          apt-cache show gcc-multilib
-          apt-cache show gcc-arm-linux-gnueabihf
-          apt-cache show gcc-aarch64-linux-gnu
-          sudo apt-get install -y build-essentials gcc-multilib gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu libasound2-dev
+          apt-cache show gcc-13-arm-linux-gnueabihf
+          sudo apt-get install -y build-essentials gcc-multilib crossbuild-essential-arm64 crossbuild-essential-armhf libasound2-dev
 
       - name: Set up Go
         uses: actions/setup-go@v5
