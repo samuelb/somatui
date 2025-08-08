@@ -265,7 +265,7 @@ func main() {
 
 	// Start the Bubble Tea program with window size handling
 	p := tea.NewProgram(m, tea.WithAltScreen())
-	if err := p.Start(); err != nil {
+	if _, err := p.Run(); err != nil {
 		fmt.Printf("Alas, there's been an error: %v\n", err)
 		os.Exit(1)
 	}
