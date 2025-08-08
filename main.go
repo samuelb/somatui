@@ -45,7 +45,7 @@ type errorMsg struct {
 
 // Init initializes the application, loading channels asynchronously.
 func (m *model) Init() tea.Cmd {
-	return loadChannels
+	return tea.Batch(loadChannels, tea.EnterAltScreen)
 }
 
 // Update handles incoming messages and updates the model's state.
@@ -108,8 +108,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case tea.WindowSizeMsg:
-		// Update the list's width when the window size changes
-		m.list.SetWidth(msg.Width)
+		// Update the list's dimensions when the window size changes
+		// Leave some space for the status line and instructions
+		m.list.SetSize(msg.Width, msg.Height-4)
 		return m, nil
 
 	case channelsLoadedMsg:
@@ -153,7 +154,7 @@ func (m *model) View() string {
 		return fmt.Sprintf("Error: %v\n", m.err)
 	}
 	// Render the channel list and status message
-	return m.list.View() + fmt.Sprintf("\n%s\n\nPress 's' to stop, 'q' to quit.\n", m.status)
+	return m.list.View() + "\n" + m.status + "\nPress 's' to stop, 'q' to quit."
 }
 
 // loadChannels is a Tea command that fetches SomaFM channels asynchronously.
@@ -193,8 +194,8 @@ func main() {
 		config:  config,
 	}
 
-	// Start the Bubble Tea program
-	p := tea.NewProgram(m)
+	// Start the Bubble Tea program with window size handling
+	p := tea.NewProgram(m, tea.WithAltScreen())
 	if err := p.Start(); err != nil {
 		fmt.Printf("Alas, there's been an error: %v\n", err)
 		os.Exit(1)
