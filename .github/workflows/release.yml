@@ -22,7 +22,7 @@ jobs:
           sudo apt-get install -y build-essential gcc-multilib crossbuild-essential-arm64 crossbuild-essential-armhf libasound2-dev
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
