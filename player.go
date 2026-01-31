@@ -3,19 +3,19 @@ package main
 import (
 	"fmt"
 	"io"
-	"net/http"
 
-	"github.com/hajimehoshi/ebiten/v2/audio/mp3"
 	"github.com/ebitengine/oto/v3"
+	"github.com/hajimehoshi/ebiten/v2/audio/mp3"
 )
 
 const userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36"
 
 // Player manages the audio playback for SomaFM streams.
 type Player struct {
-	ctx    *oto.Context
-	player *oto.Player
-	stream io.ReadCloser
+	ctx            *oto.Context
+	player         *oto.Player
+	stream         io.ReadCloser
+	bufferedStream *BufferedStream
 }
 
 // NewPlayer initializes a new audio player with a default sample rate and channel count.
@@ -38,53 +38,58 @@ func NewPlayer() (*Player, error) {
 
 // Play starts streaming and playing audio from the given URL.
 // It closes any previously playing stream before starting a new one.
-func (p *Player) Play(url string) error {
+// Returns a channel that emits buffer state updates.
+func (p *Player) Play(url string) (<-chan BufferStats, error) {
 	// Close any existing player and stream to prevent resource leaks
 	if p.player != nil {
 		p.player.Close()
+		p.player = nil
+	}
+	if p.bufferedStream != nil {
+		p.bufferedStream.Close()
+		p.bufferedStream = nil
 	}
 	if p.stream != nil {
 		p.stream.Close()
+		p.stream = nil
 	}
 
-	// Create a new HTTP request and set a User-Agent header
-	req, err := http.NewRequest("GET", url, nil)
+	// Create a new buffered stream
+	bs := NewBufferedStream(url)
+
+	// Start the buffered stream (performs initial connection)
+	statsChan, err := bs.Start()
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return nil, fmt.Errorf("failed to start buffered stream: %w", err)
 	}
-	req.Header.Set("User-Agent", userAgent)
 
-	// Execute the HTTP request
-	resp, err := http.DefaultClient.Do(req)
+	// Decode the MP3 stream from the buffered stream
+	decodedStream, err := mp3.DecodeWithSampleRate(44100, bs)
 	if err != nil {
-		return fmt.Errorf("failed to fetch stream: %w", err)
+		bs.Close()
+		return nil, fmt.Errorf("failed to decode mp3: %w", err)
 	}
 
-	// Check for successful HTTP status code
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-
-	// Decode the MP3 stream from the response body
-	decodedStream, err := mp3.DecodeWithSampleRate(44100, resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to decode mp3: %w", err)
-	}
-
-	// Store the stream and create a new player, then start playback
-	p.stream = resp.Body
+	// Store the buffered stream and create a new player, then start playback
+	p.bufferedStream = bs
 	p.player = p.ctx.NewPlayer(decodedStream)
 	p.player.Play()
 
-	return nil
+	return statsChan, nil
 }
 
 // Stop halts the current audio playback and closes the associated stream.
 func (p *Player) Stop() {
 	if p.player != nil {
 		p.player.Close()
+		p.player = nil
+	}
+	if p.bufferedStream != nil {
+		p.bufferedStream.Close()
+		p.bufferedStream = nil
 	}
 	if p.stream != nil {
 		p.stream.Close()
+		p.stream = nil
 	}
 }
