@@ -35,6 +35,8 @@ type model struct {
 	trackInfo       *TrackInfo
 	metadataReader  *MetadataReader
 	trackUpdateChan chan TrackInfo
+	bufferStats     *BufferStats
+	bufferStateChan <-chan BufferStats
 }
 
 // channelsLoadedMsg is a message sent when channels are successfully loaded.
@@ -50,6 +52,16 @@ type errorMsg struct {
 // trackUpdateMsg is a message sent when track information is updated.
 type trackUpdateMsg struct {
 	trackInfo TrackInfo
+}
+
+// bufferUpdateMsg is a message sent when buffer state changes.
+type bufferUpdateMsg struct {
+	stats BufferStats
+}
+
+// streamErrorMsg is a message sent when a stream error occurs.
+type streamErrorMsg struct {
+	err error
 }
 
 // Init initializes the application, loading channels asynchronously.
@@ -100,12 +112,14 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if err != nil {
 						m.status = fmt.Sprintf("Error getting stream URL: %v", err)
 					} else {
-						// Start playing the audio stream
-						err := m.player.Play(streamURL)
+						// Start playing the audio stream (now returns buffer state channel)
+						bufferChan, err := m.player.Play(streamURL)
 						if err != nil {
 							m.status = fmt.Sprintf("Error playing: %v", err)
 						} else {
-							m.status = fmt.Sprintf("Playing: %s", i.channel.Title)
+							m.status = fmt.Sprintf("Buffering: %s...", i.channel.Title)
+							m.bufferStateChan = bufferChan
+							m.bufferStats = nil
 
 							// Stop any existing metadata reader and start a new one
 							if m.metadataReader != nil {
@@ -118,8 +132,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							// Clear any existing track info to prevent showing outdated data
 							m.trackInfo = nil
 
-							// Start polling for track updates
-							return m, m.pollTrackUpdates()
+							// Start polling for track and buffer updates
+							return m, tea.Batch(m.pollTrackUpdates(), m.pollBufferUpdates())
 						}
 					}
 				} else {
@@ -139,6 +153,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.metadataReader = nil
 				}
 				m.trackInfo = nil
+				m.bufferStats = nil
+				m.bufferStateChan = nil
 			}
 		}
 	case tea.WindowSizeMsg:
@@ -174,6 +190,36 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.trackInfo = &msg.trackInfo
 		// Continue polling for updates
 		return m, m.pollTrackUpdates()
+	case bufferUpdateMsg:
+		// Buffer state has been updated
+		m.bufferStats = &msg.stats
+
+		// Update status based on buffer state
+		if m.playing >= 0 {
+			if i, ok := m.list.SelectedItem().(item); ok {
+				switch msg.stats.State {
+				case BufferStateBuffering:
+					m.status = fmt.Sprintf("Buffering: %s... %d%%", i.channel.Title, int(msg.stats.FillLevel*100))
+				case BufferStateHealthy:
+					m.status = fmt.Sprintf("Playing: %s", i.channel.Title)
+				case BufferStateUnderrun:
+					m.status = fmt.Sprintf("Rebuffering: %s...", i.channel.Title)
+				case BufferStateError:
+					m.status = fmt.Sprintf("Error: %v", msg.stats.LastError)
+				case BufferStateClosed:
+					m.status = "Stream closed"
+				}
+			}
+		}
+
+		// Continue polling for buffer updates
+		return m, m.pollBufferUpdates()
+	case streamErrorMsg:
+		// Stream error occurred
+		m.status = fmt.Sprintf("Stream error: %v", msg.err)
+		m.playing = -1
+		m.bufferStats = nil
+		m.bufferStateChan = nil
 	}
 
 	// Update the list component and return its command
@@ -196,10 +242,13 @@ func (m *model) View() string {
 	// Build the view
 	view := m.list.View()
 
-	// Add status line with track information on the same line
+	// Add status line with buffer and track information
 	statusLine := m.status
+	if m.bufferStats != nil && m.bufferStats.State == BufferStateHealthy {
+		statusLine += fmt.Sprintf(" | Buffer: %d%%", int(m.bufferStats.FillLevel*100))
+	}
 	if m.trackInfo != nil {
-		statusLine += fmt.Sprintf(" | 🎵 %s", m.trackInfo.Title)
+		statusLine += fmt.Sprintf(" | %s", m.trackInfo.Title)
 	}
 	view += "\n" + statusLine
 
@@ -226,6 +275,26 @@ func (m *model) pollTrackUpdates() tea.Cmd {
 		select {
 		case trackInfo := <-m.metadataReader.GetUpdateChan():
 			return trackUpdateMsg{trackInfo: trackInfo}
+		default:
+			return nil
+		}
+	})
+}
+
+// pollBufferUpdates is a Tea command that polls for buffer state updates.
+func (m *model) pollBufferUpdates() tea.Cmd {
+	return tea.Tick(100*time.Millisecond, func(t time.Time) tea.Msg {
+		if m.bufferStateChan == nil {
+			return nil
+		}
+
+		select {
+		case stats, ok := <-m.bufferStateChan:
+			if !ok {
+				// Channel closed
+				return nil
+			}
+			return bufferUpdateMsg{stats: stats}
 		default:
 			return nil
 		}
