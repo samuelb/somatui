@@ -15,9 +15,10 @@ import (
 
 // Color palette - SomaFM inspired
 var (
-	primaryColor   = lipgloss.Color("#FF6600") // Orange accent
-	playingColor   = lipgloss.Color("#00CC66") // Green for playing
-	bufferingColor = lipgloss.Color("#FFAA00") // Amber for buffering
+	titleColor     = lipgloss.Color("#ff0709") // Red for title
+	primaryColor   = lipgloss.Color("#D8A24D") // Golden accent
+	playingColor   = lipgloss.Color("#1a9096") // Teal for playing
+	bufferingColor = lipgloss.Color("#D8A24D") // Golden for buffering
 	errorColor     = lipgloss.Color("#FF3333") // Red for errors
 	subtleColor    = lipgloss.Color("#666666") // Gray for secondary text
 	dimColor       = lipgloss.Color("#444444") // Dim gray for backgrounds
@@ -27,7 +28,7 @@ var (
 var (
 	titleStyle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(primaryColor).
+			Foreground(titleColor).
 			MarginLeft(2)
 
 	statusBarStyle = lipgloss.NewStyle().
@@ -336,8 +337,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case tea.WindowSizeMsg:
 		// Update the list's dimensions when the window size changes
-		// Leave space for header, status line, and help
-		m.list.SetSize(msg.Width, msg.Height-4)
+		// Leave space for top margin, header, status line, and help
+		m.list.SetSize(msg.Width, msg.Height-5)
 		return m, nil
 
 	case channelsLoadedMsg:
@@ -512,6 +513,7 @@ func (m *model) View() string {
 	// Build the view using lipgloss layout
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
+		"", // Top margin
 		m.renderHeader(),
 		m.list.View(),
 		m.renderStatusBar(),
