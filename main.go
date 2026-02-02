@@ -2,12 +2,69 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+)
+
+// Color palette - SomaFM inspired
+var (
+	primaryColor   = lipgloss.Color("#FF6600") // Orange accent
+	playingColor   = lipgloss.Color("#00CC66") // Green for playing
+	bufferingColor = lipgloss.Color("#FFAA00") // Amber for buffering
+	errorColor     = lipgloss.Color("#FF3333") // Red for errors
+	subtleColor    = lipgloss.Color("#666666") // Gray for secondary text
+	dimColor       = lipgloss.Color("#444444") // Dim gray for backgrounds
+)
+
+// Styles
+var (
+	titleStyle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(primaryColor).
+			MarginLeft(2)
+
+	statusBarStyle = lipgloss.NewStyle().
+			Padding(0, 1).
+			MarginTop(1)
+
+	statusPlayingStyle = lipgloss.NewStyle().
+				Foreground(playingColor).
+				Bold(true)
+
+	statusBufferingStyle = lipgloss.NewStyle().
+				Foreground(bufferingColor).
+				Bold(true)
+
+	statusStoppedStyle = lipgloss.NewStyle().
+				Foreground(subtleColor)
+
+	statusErrorStyle = lipgloss.NewStyle().
+				Foreground(errorColor).
+				Bold(true)
+
+	trackInfoStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#CCCCCC")).
+			Italic(true)
+
+	loadingStyle = lipgloss.NewStyle().
+			Foreground(primaryColor).
+			Bold(true).
+			Padding(2, 4)
+
+	errorBoxStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(errorColor).
+			Foreground(errorColor).
+			Padding(1, 2).
+			MarginTop(2).
+			MarginLeft(2)
 )
 
 // item implements the list.Item interface for displaying channels.
@@ -16,13 +73,132 @@ type item struct {
 }
 
 // Title returns the title of the channel for display in the list.
-func (i item) Title() string { return i.channel.Title }
+func (i item) Title() string {
+	return i.channel.Title
+}
 
 // Description returns the description of the channel for display in the list.
 func (i item) Description() string { return i.channel.Description }
 
 // FilterValue returns the title of the channel for filtering purposes.
 func (i item) FilterValue() string { return i.channel.Title }
+
+// Listeners returns the listener count for display.
+func (i item) Listeners() string { return i.channel.Listeners }
+
+// styledDelegate is a custom delegate for styling list items.
+type styledDelegate struct {
+	list.DefaultDelegate
+	playingIndex *int
+}
+
+// newStyledDelegate creates a styled delegate for the list.
+func newStyledDelegate(playingIndex *int) styledDelegate {
+	d := list.NewDefaultDelegate()
+
+	// Normal item styles
+	d.Styles.NormalTitle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#FFFFFF")).
+		Padding(0, 0, 0, 2)
+
+	d.Styles.NormalDesc = lipgloss.NewStyle().
+		Foreground(subtleColor).
+		Padding(0, 0, 0, 2)
+
+	// Selected item styles
+	d.Styles.SelectedTitle = lipgloss.NewStyle().
+		Border(lipgloss.NormalBorder(), false, false, false, true).
+		BorderForeground(primaryColor).
+		Foreground(primaryColor).
+		Bold(true).
+		Padding(0, 0, 0, 1)
+
+	d.Styles.SelectedDesc = lipgloss.NewStyle().
+		Border(lipgloss.NormalBorder(), false, false, false, true).
+		BorderForeground(primaryColor).
+		Foreground(lipgloss.Color("#CCCCCC")).
+		Padding(0, 0, 0, 1)
+
+	return styledDelegate{DefaultDelegate: d, playingIndex: playingIndex}
+}
+
+// Render renders a list item with custom styling, including a playing indicator.
+func (d styledDelegate) Render(w io.Writer, m list.Model, index int, listItem list.Item) {
+	i, ok := listItem.(item)
+	if !ok {
+		return
+	}
+
+	// Check if this item is currently playing
+	isPlaying := d.playingIndex != nil && *d.playingIndex == index
+	isSelected := index == m.Index()
+
+	// Build title with playing indicator
+	title := i.Title()
+	if isPlaying {
+		title = "▶ " + title
+	}
+
+	// Calculate column widths
+	listWidth := m.Width()
+	listenerColWidth := 12 // Space for "XXX listeners"
+	leftColWidth := listWidth - listenerColWidth - 4 // 4 for padding/margins
+
+	if leftColWidth < 20 {
+		leftColWidth = 20
+	}
+
+	// Listener count styles
+	listenerStyle := lipgloss.NewStyle().
+		Foreground(subtleColor).
+		Width(listenerColWidth).
+		Align(lipgloss.Right)
+
+	listenerSelectedStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#CCCCCC")).
+		Width(listenerColWidth).
+		Align(lipgloss.Right)
+
+	listenerPlayingStyle := lipgloss.NewStyle().
+		Foreground(playingColor).
+		Width(listenerColWidth).
+		Align(lipgloss.Right)
+
+	// Apply styles based on state
+	var titleStr, descStr, listenerStr string
+	listeners := i.Listeners() + " ♪"
+
+	if isSelected {
+		titleStr = d.Styles.SelectedTitle.Copy().Width(leftColWidth).Render(title)
+		descStr = d.Styles.SelectedDesc.Copy().Width(leftColWidth).Render(i.Description())
+		listenerStr = listenerSelectedStyle.Render(listeners)
+	} else if isPlaying {
+		// Playing but not selected - show green indicator
+		playingTitleStyle := lipgloss.NewStyle().
+			Foreground(playingColor).
+			Padding(0, 0, 0, 2).
+			Width(leftColWidth)
+		playingDescStyle := lipgloss.NewStyle().
+			Foreground(subtleColor).
+			Padding(0, 0, 0, 2).
+			Width(leftColWidth)
+		titleStr = playingTitleStyle.Render(title)
+		descStr = playingDescStyle.Render(i.Description())
+		listenerStr = listenerPlayingStyle.Render(listeners)
+	} else {
+		titleStr = d.Styles.NormalTitle.Copy().Width(leftColWidth).Render(title)
+		descStr = d.Styles.NormalDesc.Copy().Width(leftColWidth).Render(i.Description())
+		listenerStr = listenerStyle.Render(listeners)
+	}
+
+	// Build two-column layout
+	// Title row with listener count
+	titleRow := lipgloss.JoinHorizontal(lipgloss.Top, titleStr, listenerStr)
+	// Description row (no listener count, just padding to align)
+	descRow := descStr
+
+	fmt.Fprintf(w, "%s\n%s", titleRow, descRow)
+}
 
 // model represents the application's state.
 type model struct {
@@ -229,31 +405,119 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// renderBufferBar renders a visual buffer indicator.
+func renderBufferBar(fillLevel float64, width int) string {
+	filled := int(fillLevel * float64(width))
+	if filled > width {
+		filled = width
+	}
+	if filled < 0 {
+		filled = 0
+	}
+
+	bar := strings.Repeat("█", filled) + strings.Repeat("░", width-filled)
+	percentage := int(fillLevel * 100)
+
+	return fmt.Sprintf("[%s] %d%%", bar, percentage)
+}
+
+// renderStatusBar renders the styled status bar.
+func (m *model) renderStatusBar() string {
+	var icon, stateText string
+	var stateStyle lipgloss.Style
+
+	// Determine state and styling
+	if m.playing < 0 {
+		icon = "■"
+		stateText = "Stopped"
+		stateStyle = statusStoppedStyle
+	} else if m.bufferStats != nil {
+		switch m.bufferStats.State {
+		case BufferStateBuffering, BufferStateUnderrun:
+			icon = "◌"
+			stateText = "Buffering"
+			stateStyle = statusBufferingStyle
+		case BufferStateHealthy:
+			icon = "▶"
+			stateText = "Playing"
+			stateStyle = statusPlayingStyle
+		case BufferStateError:
+			icon = "✕"
+			stateText = "Error"
+			stateStyle = statusErrorStyle
+		case BufferStateClosed:
+			icon = "■"
+			stateText = "Closed"
+			stateStyle = statusStoppedStyle
+		default:
+			icon = "◌"
+			stateText = "Buffering"
+			stateStyle = statusBufferingStyle
+		}
+	} else if m.playing >= 0 {
+		icon = "◌"
+		stateText = "Connecting"
+		stateStyle = statusBufferingStyle
+	}
+
+	// Build the status line
+	parts := []string{stateStyle.Render(icon + " " + stateText)}
+
+	// Add channel name if playing
+	if m.playing >= 0 {
+		if items := m.list.Items(); m.playing < len(items) {
+			if i, ok := items[m.playing].(item); ok {
+				channelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF"))
+				parts = append(parts, channelStyle.Render(i.channel.Title))
+			}
+		}
+	}
+
+	// Add buffer bar when buffering or playing
+	if m.bufferStats != nil && (m.bufferStats.State == BufferStateBuffering ||
+		m.bufferStats.State == BufferStateHealthy ||
+		m.bufferStats.State == BufferStateUnderrun) {
+
+		bufferStyle := lipgloss.NewStyle().Foreground(dimColor)
+		if m.bufferStats.State == BufferStateHealthy {
+			bufferStyle = bufferStyle.Foreground(subtleColor)
+		}
+		parts = append(parts, bufferStyle.Render(renderBufferBar(m.bufferStats.FillLevel, 10)))
+	}
+
+	// Add track info with music note
+	if m.trackInfo != nil && m.trackInfo.Title != "" {
+		trackStr := "♪ " + m.trackInfo.Title
+		parts = append(parts, trackInfoStyle.Render(trackStr))
+	}
+
+	// Add error message if present
+	if m.bufferStats != nil && m.bufferStats.State == BufferStateError && m.bufferStats.LastError != nil {
+		parts = append(parts, statusErrorStyle.Render(m.bufferStats.LastError.Error()))
+	}
+
+	return statusBarStyle.Render(strings.Join(parts, "  │  "))
+}
+
 // View renders the application's UI.
 func (m *model) View() string {
 	// Display loading message if channels are still being fetched
 	if m.loading {
-		return "Loading channels..."
+		return loadingStyle.Render("◌ Loading SomaFM channels...")
 	}
+
 	// Display error message if an error occurred
 	if m.err != nil {
-		return fmt.Sprintf("Error: %v\n", m.err)
+		errorContent := fmt.Sprintf("✕ Error loading channels\n\n%v\n\nPress 'q' to quit or 'r' to retry", m.err)
+		return errorBoxStyle.Render(errorContent)
 	}
 
-	// Build the view
-	view := m.list.View()
-
-	// Add status line with buffer and track information
-	statusLine := m.status
-	if m.bufferStats != nil && m.bufferStats.State == BufferStateHealthy {
-		statusLine += fmt.Sprintf(" | Buffer: %d%%", int(m.bufferStats.FillLevel*100))
-	}
-	if m.trackInfo != nil {
-		statusLine += fmt.Sprintf(" | %s", m.trackInfo.Title)
-	}
-	view += "\n" + statusLine
-
-	return view
+	// Build the view using lipgloss layout
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		m.list.View(),
+		m.renderStatusBar(),
+	)
 }
 
 // loadChannels is a Tea command that fetches SomaFM channels asynchronously.
@@ -316,18 +580,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Initialize the Bubble Tea list component
-	l := list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0)
-	l.Title = "SomaFM Stations"
-	l.AdditionalShortHelpKeys = func() []key.Binding {
-		return []key.Binding{
-			key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "stop")),
-		}
-	}
-
-	// Create the main application model
+	// Create the main application model (need playing index for delegate)
 	m := &model{
-		list:            l,
 		player:          player,
 		playing:         -1,
 		loading:         true,
@@ -336,6 +590,20 @@ func main() {
 		metadataReader:  nil,
 		trackUpdateChan: nil,
 	}
+
+	// Initialize the Bubble Tea list component with styled delegate
+	delegate := newStyledDelegate(&m.playing)
+	l := list.New([]list.Item{}, delegate, 0, 0)
+	l.Title = "SomaFM Stations"
+	l.Styles.Title = titleStyle
+	l.Styles.PaginationStyle = lipgloss.NewStyle().Foreground(subtleColor)
+	l.Styles.HelpStyle = lipgloss.NewStyle().Foreground(subtleColor).Padding(0, 0, 0, 2)
+	l.AdditionalShortHelpKeys = func() []key.Binding {
+		return []key.Binding{
+			key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "stop")),
+		}
+	}
+	m.list = l
 
 	// Start the Bubble Tea program with window size handling
 	p := tea.NewProgram(m, tea.WithAltScreen())
