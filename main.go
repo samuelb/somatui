@@ -336,8 +336,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case tea.WindowSizeMsg:
 		// Update the list's dimensions when the window size changes
-		// Leave space for status line and instructions
-		m.list.SetSize(msg.Width, msg.Height-3)
+		// Leave space for header, status line, and help
+		m.list.SetSize(msg.Width, msg.Height-4)
 		return m, nil
 
 	case channelsLoadedMsg:
@@ -403,6 +403,31 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.list, cmd = m.list.Update(msg)
 	return m, cmd
+}
+
+// renderHeader renders the list header with column titles.
+func (m *model) renderHeader() string {
+	listWidth := m.list.Width()
+	listenerColWidth := 12
+	leftColWidth := listWidth - listenerColWidth - 4
+
+	if leftColWidth < 20 {
+		leftColWidth = 20
+	}
+
+	// Title on the left
+	title := titleStyle.Copy().
+		Width(leftColWidth).
+		Render("SomaFM Stations")
+
+	// "Listeners" column header on the right
+	listenerHeader := lipgloss.NewStyle().
+		Foreground(subtleColor).
+		Width(listenerColWidth).
+		Align(lipgloss.Right).
+		Render("Listeners")
+
+	return lipgloss.JoinHorizontal(lipgloss.Bottom, title, listenerHeader)
 }
 
 // renderBufferBar renders a visual buffer indicator.
@@ -515,6 +540,7 @@ func (m *model) View() string {
 	// Build the view using lipgloss layout
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
+		m.renderHeader(),
 		m.list.View(),
 		m.renderStatusBar(),
 	)
@@ -594,8 +620,7 @@ func main() {
 	// Initialize the Bubble Tea list component with styled delegate
 	delegate := newStyledDelegate(&m.playing)
 	l := list.New([]list.Item{}, delegate, 0, 0)
-	l.Title = "SomaFM Stations"
-	l.Styles.Title = titleStyle
+	l.SetShowTitle(false) // We render our own header with column titles
 	l.Styles.PaginationStyle = lipgloss.NewStyle().Foreground(subtleColor)
 	l.Styles.HelpStyle = lipgloss.NewStyle().Foreground(subtleColor).Padding(0, 0, 0, 2)
 	l.AdditionalShortHelpKeys = func() []key.Binding {
