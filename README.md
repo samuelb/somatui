@@ -2,7 +2,9 @@
 
 **✨ This project was entirely vibe-coded. ✨**
 
-A modern, TUI (Terminal User Interface) client for streaming and exploring SomaFM radio channels. Built in Go using the [Bubble Tea](https://github.com/charmbracelet/bubbletea) framework, it features a snappy interface, audio playback, and now-playing track metadata.
+A modern, TUI (Terminal User Interface) client for streaming and exploring SomaFM radio channels.
+
+![SomaTUI Demo](demo.gif)
 
 ## Features
 
@@ -18,6 +20,7 @@ A modern, TUI (Terminal User Interface) client for streaming and exploring SomaF
 ## Installation
 
 ### Prerequisites
+
 - Go 1.20 or newer
 - Linux (audio may require features specific to your system) or MacOS
 
@@ -38,6 +41,7 @@ Simply run:
 ```
 
 ### Keyboard Controls
+
 - <kbd>Up/Down</kbd> or <kbd>j/k</kbd>: Navigate channels
 - <kbd>Enter</kbd> or <kbd>Space</kbd>: Play selected channel
 - <kbd>s</kbd>: Stop playback
