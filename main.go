@@ -141,7 +141,7 @@ func (d styledDelegate) Render(w io.Writer, m list.Model, index int, listItem li
 
 	// Calculate column widths
 	listWidth := m.Width()
-	listenerColWidth := 12 // Space for "XXX listeners"
+	listenerColWidth := 12                           // Space for "XXX listeners"
 	leftColWidth := listWidth - listenerColWidth - 4 // 4 for padding/margins
 
 	if leftColWidth < 20 {
@@ -380,7 +380,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case BufferStateHealthy:
 					m.status = fmt.Sprintf("Playing: %s", i.channel.Title)
 				case BufferStateUnderrun:
-					m.status = fmt.Sprintf("Rebuffering: %s...", i.channel.Title)
+					m.status = fmt.Sprintf("Rebuffering: %s... %d%%", i.channel.Title, int(msg.stats.FillLevel*100))
 				case BufferStateError:
 					m.status = fmt.Sprintf("Error: %v", msg.stats.LastError)
 				case BufferStateClosed:
@@ -430,22 +430,6 @@ func (m *model) renderHeader() string {
 	return lipgloss.JoinHorizontal(lipgloss.Bottom, title, listenerHeader)
 }
 
-// renderBufferBar renders a visual buffer indicator.
-func renderBufferBar(fillLevel float64, width int) string {
-	filled := int(fillLevel * float64(width))
-	if filled > width {
-		filled = width
-	}
-	if filled < 0 {
-		filled = 0
-	}
-
-	bar := strings.Repeat("█", filled) + strings.Repeat("░", width-filled)
-	percentage := int(fillLevel * 100)
-
-	return fmt.Sprintf("[%s] %d%%", bar, percentage)
-}
-
 // renderStatusBar renders the styled status bar.
 func (m *model) renderStatusBar() string {
 	var icon, stateText string
@@ -460,7 +444,7 @@ func (m *model) renderStatusBar() string {
 		switch m.bufferStats.State {
 		case BufferStateBuffering, BufferStateUnderrun:
 			icon = "◌"
-			stateText = "Buffering"
+			stateText = fmt.Sprintf("Buffering (%d%%)", int(m.bufferStats.FillLevel*100))
 			stateStyle = statusBufferingStyle
 		case BufferStateHealthy:
 			icon = "▶"
@@ -476,7 +460,7 @@ func (m *model) renderStatusBar() string {
 			stateStyle = statusStoppedStyle
 		default:
 			icon = "◌"
-			stateText = "Buffering"
+			stateText = fmt.Sprintf("Buffering (%d%%)", int(m.bufferStats.FillLevel*100))
 			stateStyle = statusBufferingStyle
 		}
 	} else if m.playing >= 0 {
@@ -496,18 +480,6 @@ func (m *model) renderStatusBar() string {
 				parts = append(parts, channelStyle.Render(i.channel.Title))
 			}
 		}
-	}
-
-	// Add buffer bar when buffering or playing
-	if m.bufferStats != nil && (m.bufferStats.State == BufferStateBuffering ||
-		m.bufferStats.State == BufferStateHealthy ||
-		m.bufferStats.State == BufferStateUnderrun) {
-
-		bufferStyle := lipgloss.NewStyle().Foreground(dimColor)
-		if m.bufferStats.State == BufferStateHealthy {
-			bufferStyle = bufferStyle.Foreground(subtleColor)
-		}
-		parts = append(parts, bufferStyle.Render(renderBufferBar(m.bufferStats.FillLevel, 10)))
 	}
 
 	// Add track info with music note
