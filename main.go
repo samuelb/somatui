@@ -31,10 +31,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Load application configuration
-	config, err := LoadConfig()
+	// Load application state
+	state, err := LoadState()
 	if err != nil {
-		fmt.Printf("Alas, there's been an error loading config: %v\n", err)
+		fmt.Printf("Alas, there's been an error loading state: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -43,7 +43,7 @@ func main() {
 		player:          player,
 		playing:         -1,
 		loading:         true,
-		config:          config,
+		state:           state,
 		trackInfo:       nil,
 		metadataReader:  nil,
 		trackUpdateChan: nil,

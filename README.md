@@ -55,9 +55,10 @@ To check the version:
 - <kbd>/</kbd>: Filter channels
 - <kbd>q</kbd> or <kbd>Ctrl+C</kbd>: Quit
 
-## Configuration & Cache
+## Data Storage
 
-- Config and cache files are stored under your XDG-compliant config/cache directory, e.g. `~/.config/somatui` and `~/.cache/somatui`.
+- **State**: `~/.local/state/somatui/` (Linux) or `~/Library/Application Support/somatui/` (macOS)
+- **Cache**: `~/.cache/somatui/` (Linux) or `~/Library/Caches/somatui/` (macOS)
 - The client remembers your last selected channel across sessions.
 
 ## Dependencies

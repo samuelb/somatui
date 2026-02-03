@@ -18,7 +18,7 @@ type model struct {
 	status          string
 	loading         bool
 	err             error
-	config          *Config
+	state           *State
 	trackInfo       *TrackInfo
 	metadataReader  *MetadataReader
 	trackUpdateChan chan TrackInfo
@@ -78,12 +78,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if i, ok := m.list.SelectedItem().(item); ok {
 				m.playing = m.list.Index()
 
-				// Save the ID of the last selected channel to config
-				if m.config != nil {
-					m.config.LastSelectedChannelID = i.channel.ID
-					if err := SaveConfig(m.config); err != nil {
+				// Save the ID of the last selected channel to state
+				if m.state != nil {
+					m.state.LastSelectedChannelID = i.channel.ID
+					if err := SaveState(m.state); err != nil {
 						// Log the error but don't interrupt the user experience
-						fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
+						fmt.Fprintf(os.Stderr, "Error saving state: %v\n", err)
 					}
 				}
 
@@ -169,9 +169,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loading = false
 
 		// Set the cursor to the last selected channel if available
-		if m.config != nil && m.config.LastSelectedChannelID != "" {
+		if m.state != nil && m.state.LastSelectedChannelID != "" {
 			for i, ch := range msg.channels.Channels {
-				if ch.ID == m.config.LastSelectedChannelID {
+				if ch.ID == m.state.LastSelectedChannelID {
 					m.list.Select(i)
 					break
 				}
