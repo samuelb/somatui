@@ -20,7 +20,6 @@ type model struct {
 	list           list.Model
 	player         *Player
 	playing        int // Index of the playing channel, -1 if not playing
-	status         string
 	loading        bool
 	err            error
 	state          *State
@@ -50,9 +49,7 @@ type trackUpdateMsg struct {
 }
 
 // streamErrorMsg is a message sent when a stream error occurs.
-type streamErrorMsg struct {
-	err error
-}
+type streamErrorMsg struct{}
 
 // channelRefreshTickMsg is a message sent when it's time to refresh channels.
 type channelRefreshTickMsg struct{}
@@ -94,22 +91,17 @@ func (m *model) playChannel(i item) tea.Cmd {
 
 	playlistURL := selectMP3PlaylistURL(i.channel.Playlists)
 	if playlistURL == "" {
-		m.status = "No MP3 stream found for this channel."
 		return nil
 	}
 
 	streamURL, err := getStreamURLFromPlaylist(playlistURL)
 	if err != nil {
-		m.status = fmt.Sprintf("Error getting stream URL: %v", err)
 		return nil
 	}
 
 	if err := m.player.Play(streamURL); err != nil {
-		m.status = fmt.Sprintf("Error playing: %v", err)
 		return nil
 	}
-
-	m.status = fmt.Sprintf("Playing: %s...", i.channel.Title)
 	m.stopMetadataReader()
 	m.metadataReader = NewMetadataReader(streamURL)
 	m.metadataReader.Start()
@@ -137,7 +129,6 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.player != nil {
 				m.player.Stop()
 				m.playing = -1
-				m.status = "Stopped"
 				m.stopMetadataReader()
 				m.trackInfo = nil
 			}
@@ -206,8 +197,6 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Track information has been updated
 		m.trackInfo = &msg.trackInfo
 	case streamErrorMsg:
-		// Stream error occurred
-		m.status = fmt.Sprintf("Stream error: %v", msg.err)
 		m.playing = -1
 	}
 
@@ -276,11 +265,6 @@ func (m *model) renderStatusBar() string {
 		parts = append(parts, trackInfoStyle.Render(trackStr))
 	}
 
-	// Add error message if present
-	if m.err != nil {
-		parts = append(parts, statusErrorStyle.Render(m.err.Error()))
-	}
-
 	return statusBarStyle.Render(strings.Join(parts, "  │  "))
 }
 
@@ -291,9 +275,9 @@ func (m *model) View() string {
 		return loadingStyle.Render("◌ Loading SomaFM channels...")
 	}
 
-	// Display error message if an error occurred
+	// Display error message if channel loading failed
 	if m.err != nil {
-		errorContent := fmt.Sprintf("✕ Error loading channels\n\n%v\n\nPress 'q' to quit or 'r' to retry", m.err)
+		errorContent := fmt.Sprintf("✕ Error loading channels\n\n%v\n\nPress 'q' to quit", m.err)
 		return errorBoxStyle.Render(errorContent)
 	}
 

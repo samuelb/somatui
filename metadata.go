@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -22,6 +23,7 @@ type MetadataReader struct {
 	url        string
 	client     *http.Client
 	stopChan   chan struct{}
+	stopOnce   sync.Once
 	updateChan chan TrackInfo
 }
 
@@ -59,9 +61,11 @@ func (mr *MetadataReader) Start() {
 	}()
 }
 
-// Stop halts the metadata monitoring.
+// Stop halts the metadata monitoring. Safe to call multiple times.
 func (mr *MetadataReader) Stop() {
-	close(mr.stopChan)
+	mr.stopOnce.Do(func() {
+		close(mr.stopChan)
+	})
 }
 
 // GetUpdateChan returns the channel for receiving metadata updates.
@@ -115,13 +119,12 @@ func (mr *MetadataReader) readICYMetadata(body io.Reader, icyIntStr string) (Tra
 	}
 
 	// Read the metadata length byte
-	metaLenBytes := make([]byte, 1)
-	_, err = io.ReadFull(reader, metaLenBytes)
+	metaLenByte, err := reader.ReadByte()
 	if err != nil {
 		return TrackInfo{}, fmt.Errorf("failed to read metadata length: %w", err)
 	}
 
-	metaLen := int(metaLenBytes[0]) * 16
+	metaLen := int(metaLenByte) * 16
 	if metaLen == 0 {
 		return TrackInfo{}, fmt.Errorf("no metadata available")
 	}
