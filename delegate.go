@@ -110,8 +110,9 @@ func (d styledDelegate) Render(w io.Writer, m list.Model, index int, listItem li
 	listeners := i.Listeners() + " ♪"
 
 	if isSelected {
-		titleStr = d.Styles.SelectedTitle.Width(leftColWidth).Render(title)
-		descStr = d.Styles.SelectedDesc.Width(leftColWidth).Render(i.Description())
+		// Subtract 1 from width to account for left border character
+		titleStr = d.Styles.SelectedTitle.Width(leftColWidth - 1).Render(title)
+		descStr = d.Styles.SelectedDesc.Width(leftColWidth - 1).Render(i.Description())
 		listenerStr = listenerSelectedStyle.Render(listeners)
 	} else if isPlaying {
 		// Playing but not selected - show green indicator
