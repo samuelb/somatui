@@ -258,7 +258,7 @@ func (m *model) renderHeader() string {
 	}
 
 	// Title on the left
-	title := titleStyle.Copy().
+	title := titleStyle.
 		Width(leftColWidth).
 		Render("SomaFM Stations")
 

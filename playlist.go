@@ -18,7 +18,7 @@ func getStreamURLFromPlaylist(playlistURL string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to get playlist from %s: %w", playlistURL, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Check if the HTTP request was successful
 	if resp.StatusCode != http.StatusOK {

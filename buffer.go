@@ -152,7 +152,7 @@ func (bs *BufferedStream) connect() error {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
@@ -199,7 +199,7 @@ func (bs *BufferedStream) fillLoop() {
 			}
 
 			// Connection error - attempt reconnection
-			bs.resp.Body.Close()
+			_ = bs.resp.Body.Close()
 			bs.resp = nil
 
 			if bs.reconnectConfig.MaxRetries > 0 && retries >= bs.reconnectConfig.MaxRetries {
@@ -369,7 +369,7 @@ func (bs *BufferedStream) Close() error {
 	defer bs.mu.Unlock()
 
 	if bs.resp != nil {
-		bs.resp.Body.Close()
+		_ = bs.resp.Body.Close()
 	}
 
 	bs.closed = true

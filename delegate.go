@@ -110,8 +110,8 @@ func (d styledDelegate) Render(w io.Writer, m list.Model, index int, listItem li
 	listeners := i.Listeners() + " ♪"
 
 	if isSelected {
-		titleStr = d.Styles.SelectedTitle.Copy().Width(leftColWidth).Render(title)
-		descStr = d.Styles.SelectedDesc.Copy().Width(leftColWidth).Render(i.Description())
+		titleStr = d.Styles.SelectedTitle.Width(leftColWidth).Render(title)
+		descStr = d.Styles.SelectedDesc.Width(leftColWidth).Render(i.Description())
 		listenerStr = listenerSelectedStyle.Render(listeners)
 	} else if isPlaying {
 		// Playing but not selected - show green indicator
@@ -127,8 +127,8 @@ func (d styledDelegate) Render(w io.Writer, m list.Model, index int, listItem li
 		descStr = playingDescStyle.Render(i.Description())
 		listenerStr = listenerPlayingStyle.Render(listeners)
 	} else {
-		titleStr = d.Styles.NormalTitle.Copy().Width(leftColWidth).Render(title)
-		descStr = d.Styles.NormalDesc.Copy().Width(leftColWidth).Render(i.Description())
+		titleStr = d.Styles.NormalTitle.Width(leftColWidth).Render(title)
+		descStr = d.Styles.NormalDesc.Width(leftColWidth).Render(i.Description())
 		listenerStr = listenerStyle.Render(listeners)
 	}
 
@@ -138,5 +138,5 @@ func (d styledDelegate) Render(w io.Writer, m list.Model, index int, listItem li
 	// Description row (no listener count, just padding to align)
 	descRow := descStr
 
-	fmt.Fprintf(w, "%s\n%s", titleRow, descRow)
+	_, _ = fmt.Fprintf(w, "%s\n%s", titleRow, descRow)
 }

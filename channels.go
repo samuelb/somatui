@@ -99,7 +99,7 @@ func fetchChannelsFromNetwork() (*Channels, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch channels from network: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("unexpected status code from network: %d", resp.StatusCode)
@@ -119,15 +119,3 @@ func fetchChannelsFromNetwork() (*Channels, error) {
 	return &fetchedChannels, nil
 }
 
-// getChannels fetches SomaFM channel data, prioritizing the local cache.
-// If the cache is unavailable, it fetches from the network.
-func getChannels() (*Channels, error) {
-	// Try to read from cache first
-	channels, err := readChannelsFromCache()
-	if err == nil {
-		return channels, nil
-	}
-
-	// If cache read fails, fetch from network
-	return fetchChannelsFromNetwork()
-}
