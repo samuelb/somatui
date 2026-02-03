@@ -55,6 +55,11 @@ func main() {
 	l.SetShowTitle(false) // We render our own header with column titles
 	l.Styles.PaginationStyle = lipgloss.NewStyle().Foreground(subtleColor)
 	l.Styles.HelpStyle = lipgloss.NewStyle().Foreground(subtleColor).Padding(0, 0, 0, 2)
+	l.AdditionalFullHelpKeys = func() []key.Binding {
+		return []key.Binding{
+			key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "stop")),
+		}
+	}
 	l.AdditionalShortHelpKeys = func() []key.Binding {
 		return []key.Binding{
 			key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "stop")),
