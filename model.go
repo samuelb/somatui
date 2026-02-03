@@ -22,8 +22,6 @@ type model struct {
 	trackInfo       *TrackInfo
 	metadataReader  *MetadataReader
 	trackUpdateChan chan TrackInfo
-	bufferStats     *BufferStats
-	bufferStateChan <-chan BufferStats
 }
 
 // channelsLoadedMsg is a message sent when channels are successfully loaded.
@@ -45,11 +43,6 @@ type errorMsg struct {
 // trackUpdateMsg is a message sent when track information is updated.
 type trackUpdateMsg struct {
 	trackInfo TrackInfo
-}
-
-// bufferUpdateMsg is a message sent when buffer state changes.
-type bufferUpdateMsg struct {
-	stats BufferStats
 }
 
 // streamErrorMsg is a message sent when a stream error occurs.
@@ -108,14 +101,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if err != nil {
 						m.status = fmt.Sprintf("Error getting stream URL: %v", err)
 					} else {
-						// Start playing the audio stream (now returns buffer state channel)
-						bufferChan, err := m.player.Play(streamURL)
+						// Start playing the audio stream
+						err := m.player.Play(streamURL)
 						if err != nil {
 							m.status = fmt.Sprintf("Error playing: %v", err)
 						} else {
-							m.status = fmt.Sprintf("Buffering: %s...", i.channel.Title)
-							m.bufferStateChan = bufferChan
-							m.bufferStats = nil
+							m.status = fmt.Sprintf("Playing: %s...", i.channel.Title)
 
 							// Stop any existing metadata reader and start a new one
 							if m.metadataReader != nil {
@@ -128,8 +119,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							// Clear any existing track info to prevent showing outdated data
 							m.trackInfo = nil
 
-							// Start polling for track and buffer updates
-							return m, tea.Batch(m.pollTrackUpdates(), m.pollBufferUpdates())
+							// Start polling for track updates
+							return m, m.pollTrackUpdates()
 						}
 					}
 				} else {
@@ -149,8 +140,6 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.metadataReader = nil
 				}
 				m.trackInfo = nil
-				m.bufferStats = nil
-				m.bufferStateChan = nil
 			}
 		}
 	case tea.WindowSizeMsg:
@@ -202,43 +191,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case trackUpdateMsg:
 		// Track information has been updated
 		m.trackInfo = &msg.trackInfo
-		// Continue polling for updates
-		return m, m.pollTrackUpdates()
-	case bufferUpdateMsg:
-		// Buffer state has been updated
-		m.bufferStats = &msg.stats
-
-		// Update status based on buffer state
-		if m.playing >= 0 {
-			if i, ok := m.list.SelectedItem().(item); ok {
-				switch msg.stats.State {
-				case BufferStateBuffering:
-					m.status = fmt.Sprintf("Buffering: %s... %d%%", i.channel.Title, int(msg.stats.FillLevel*100))
-				case BufferStateHealthy:
-					m.status = fmt.Sprintf("Playing: %s", i.channel.Title)
-				case BufferStateUnderrun:
-					m.status = fmt.Sprintf("Rebuffering: %s... %d%%", i.channel.Title, int(msg.stats.FillLevel*100))
-				case BufferStateError:
-					m.status = fmt.Sprintf("Error: %v", msg.stats.LastError)
-				case BufferStateClosed:
-					m.status = "Stream closed"
-				}
-			}
-		}
-
-		// Continue polling for buffer updates
-		return m, m.pollBufferUpdates()
-	case tickMsg:
-		// Continue polling to keep UI refreshing
-		if m.playing >= 0 {
-			return m, m.pollBufferUpdates()
-		}
 	case streamErrorMsg:
 		// Stream error occurred
 		m.status = fmt.Sprintf("Stream error: %v", msg.err)
 		m.playing = -1
-		m.bufferStats = nil
-		m.bufferStateChan = nil
 	}
 
 	// Update the list component and return its command
@@ -282,33 +238,10 @@ func (m *model) renderStatusBar() string {
 		icon = "■"
 		stateText = "Stopped"
 		stateStyle = statusStoppedStyle
-	} else if m.bufferStats != nil {
-		switch m.bufferStats.State {
-		case BufferStateBuffering, BufferStateUnderrun:
-			icon = "◌"
-			stateText = fmt.Sprintf("Buffering (%d%%)", int(m.bufferStats.FillLevel*100))
-			stateStyle = statusBufferingStyle
-		case BufferStateHealthy:
-			icon = "▶"
-			stateText = "Playing"
-			stateStyle = statusPlayingStyle
-		case BufferStateError:
-			icon = "✕"
-			stateText = "Error"
-			stateStyle = statusErrorStyle
-		case BufferStateClosed:
-			icon = "■"
-			stateText = "Closed"
-			stateStyle = statusStoppedStyle
-		default:
-			icon = "◌"
-			stateText = fmt.Sprintf("Buffering (%d%%)", int(m.bufferStats.FillLevel*100))
-			stateStyle = statusBufferingStyle
-		}
-	} else if m.playing >= 0 {
-		icon = "◌"
-		stateText = "Connecting"
-		stateStyle = statusBufferingStyle
+	} else {
+		icon = "▶"
+		stateText = "Playing"
+		stateStyle = statusPlayingStyle
 	}
 
 	// Build the status line
@@ -331,8 +264,8 @@ func (m *model) renderStatusBar() string {
 	}
 
 	// Add error message if present
-	if m.bufferStats != nil && m.bufferStats.State == BufferStateError && m.bufferStats.LastError != nil {
-		parts = append(parts, statusErrorStyle.Render(m.bufferStats.LastError.Error()))
+	if m.err != nil {
+		parts = append(parts, statusErrorStyle.Render(m.err.Error()))
 	}
 
 	return statusBarStyle.Render(strings.Join(parts, "  │  "))

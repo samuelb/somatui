@@ -47,23 +47,3 @@ func (m *model) pollTrackUpdates() tea.Cmd {
 		}
 	})
 }
-
-// pollBufferUpdates is a Tea command that polls for buffer state updates.
-func (m *model) pollBufferUpdates() tea.Cmd {
-	return tea.Tick(100*time.Millisecond, func(t time.Time) tea.Msg {
-		if m.bufferStateChan == nil {
-			return tickMsg{} // Keep UI refreshing
-		}
-
-		select {
-		case stats, ok := <-m.bufferStateChan:
-			if !ok {
-				// Channel closed
-				return tickMsg{}
-			}
-			return bufferUpdateMsg{stats: stats}
-		default:
-			return tickMsg{} // Keep UI refreshing even without new stats
-		}
-	})
-}
