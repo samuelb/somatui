@@ -140,9 +140,20 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case tea.WindowSizeMsg:
+		// Dynamically calculate the height needed for the header and status bar
+		headerHeight := lipgloss.Height(m.renderHeader())
+		statusBarHeight := lipgloss.Height(m.renderStatusBar())
+
+		// Total height occupied by elements other than the list itself
+		// Includes:
+		// - 1 line for the top margin (the empty string in m.View())
+		// - The calculated headerHeight
+		// - The calculated statusBarHeight
+		// - Plus 1 for safety/extra margin (adjust as needed)
+		totalFixedUIHeight := 1 + headerHeight + statusBarHeight + 1
+
 		// Update the list's dimensions when the window size changes
-		// Leave space for top margin, header, status line, and help
-		m.list.SetSize(msg.Width, msg.Height-5)
+		m.list.SetSize(msg.Width, msg.Height-totalFixedUIHeight)
 		return m, nil
 
 	case channelsLoadedMsg:
@@ -256,7 +267,7 @@ func (m *model) renderStatusBar() string {
 
 	// Add track info with music note
 	if m.trackInfo != nil && m.trackInfo.Title != "" {
-		trackStr := "♪ " + m.trackInfo.Title
+		trackStr := "♫ " + m.trackInfo.Title
 		parts = append(parts, trackInfoStyle.Render(trackStr))
 	}
 
