@@ -2,6 +2,10 @@
 
 This is a list of features and improvements I'm considering for future versions of SomaTUI.
 
+## Bugs
+
+- [ ] When using the filter, the wrong channel is being played
+
 ## Features
 
 - [ ] Implement desktop notifications for song changes.
@@ -15,4 +19,3 @@ This is a list of features and improvements I'm considering for future versions 
 ## Architecture
 
 - [ ] Split the software into a UI client and a server component.
-
