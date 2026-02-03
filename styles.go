@@ -10,7 +10,6 @@ var (
 	bufferingColor = lipgloss.Color("#D8A24D") // Golden for buffering
 	errorColor     = lipgloss.Color("#FF3333") // Red for errors
 	subtleColor    = lipgloss.Color("#666666") // Gray for secondary text
-	dimColor       = lipgloss.Color("#444444") // Dim gray for backgrounds
 )
 
 // Styles

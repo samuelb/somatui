@@ -81,7 +81,7 @@ func (mr *MetadataReader) getMetadata() (TrackInfo, error) {
 	if err != nil {
 		return TrackInfo{}, fmt.Errorf("failed to fetch stream: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return TrackInfo{}, fmt.Errorf("unexpected status code: %d", resp.StatusCode)

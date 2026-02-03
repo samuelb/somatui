@@ -78,7 +78,7 @@ Version=2`,
 			// Create test server
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(tt.statusCode)
-				w.Write([]byte(tt.content))
+				_, _ = w.Write([]byte(tt.content))
 			}))
 			defer server.Close()
 

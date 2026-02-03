@@ -42,15 +42,15 @@ func NewPlayer() (*Player, error) {
 func (p *Player) Play(url string) (<-chan BufferStats, error) {
 	// Close any existing player and stream to prevent resource leaks
 	if p.player != nil {
-		p.player.Close()
+		_ = p.player.Close()
 		p.player = nil
 	}
 	if p.bufferedStream != nil {
-		p.bufferedStream.Close()
+		_ = p.bufferedStream.Close()
 		p.bufferedStream = nil
 	}
 	if p.stream != nil {
-		p.stream.Close()
+		_ = p.stream.Close()
 		p.stream = nil
 	}
 
@@ -66,7 +66,7 @@ func (p *Player) Play(url string) (<-chan BufferStats, error) {
 	// Decode the MP3 stream from the buffered stream
 	decodedStream, err := mp3.DecodeWithSampleRate(44100, bs)
 	if err != nil {
-		bs.Close()
+		_ = bs.Close()
 		return nil, fmt.Errorf("failed to decode mp3: %w", err)
 	}
 
@@ -81,15 +81,15 @@ func (p *Player) Play(url string) (<-chan BufferStats, error) {
 // Stop halts the current audio playback and closes the associated stream.
 func (p *Player) Stop() {
 	if p.player != nil {
-		p.player.Close()
+		_ = p.player.Close()
 		p.player = nil
 	}
 	if p.bufferedStream != nil {
-		p.bufferedStream.Close()
+		_ = p.bufferedStream.Close()
 		p.bufferedStream = nil
 	}
 	if p.stream != nil {
-		p.stream.Close()
+		_ = p.stream.Close()
 		p.stream = nil
 	}
 }
