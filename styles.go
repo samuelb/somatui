@@ -29,10 +29,6 @@ var (
 	statusStoppedStyle = lipgloss.NewStyle().
 				Foreground(subtleColor)
 
-	statusErrorStyle = lipgloss.NewStyle().
-				Foreground(errorColor).
-				Bold(true)
-
 	trackInfoStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#CCCCCC")).
 			Italic(true)
