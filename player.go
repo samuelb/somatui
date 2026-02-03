@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"net/http"
 
 	"github.com/ebitengine/oto/v3"
 	"github.com/hajimehoshi/ebiten/v2/audio/mp3"
@@ -12,10 +13,9 @@ const userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 
 
 // Player manages the audio playback for SomaFM streams.
 type Player struct {
-	ctx            *oto.Context
-	player         *oto.Player
-	stream         io.ReadCloser
-	bufferedStream *BufferedStream
+	ctx    *oto.Context
+	player *oto.Player
+	stream io.Closer
 }
 
 // NewPlayer initializes a new audio player with a default sample rate and channel count.
@@ -38,44 +38,66 @@ func NewPlayer() (*Player, error) {
 
 // Play starts streaming and playing audio from the given URL.
 // It closes any previously playing stream before starting a new one.
-// Returns a channel that emits buffer state updates.
-func (p *Player) Play(url string) (<-chan BufferStats, error) {
+func (p *Player) Play(url string) error {
 	// Close any existing player and stream to prevent resource leaks
 	if p.player != nil {
 		_ = p.player.Close()
 		p.player = nil
-	}
-	if p.bufferedStream != nil {
-		_ = p.bufferedStream.Close()
-		p.bufferedStream = nil
 	}
 	if p.stream != nil {
 		_ = p.stream.Close()
 		p.stream = nil
 	}
 
-	// Create a new buffered stream
-	bs := NewBufferedStream(url)
+	// Create a pipe to connect the HTTP stream to the MP3 decoder
+	pr, pw := io.Pipe()
 
-	// Start the buffered stream (performs initial connection)
-	statsChan, err := bs.Start()
+	// Start a goroutine to fetch the stream and write it to the pipe
+	go func() {
+		defer pw.Close()
+
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			pw.CloseWithError(fmt.Errorf("failed to create request: %w", err))
+			return
+		}
+		req.Header.Set("User-Agent", userAgent)
+
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			pw.CloseWithError(fmt.Errorf("failed to fetch stream: %w", err))
+			return
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			pw.CloseWithError(fmt.Errorf("unexpected status code: %d", resp.StatusCode))
+			return
+		}
+
+		// Copy the stream to the pipe writer
+		_, err = io.Copy(pw, resp.Body)
+		if err != nil {
+			// An error is expected on pipe close, so we don't report it
+			return
+		}
+	}()
+
+	// Decode the MP3 stream from the pipe reader
+	decodedStream, err := mp3.DecodeWithSampleRate(44100, pr)
 	if err != nil {
-		return nil, fmt.Errorf("failed to start buffered stream: %w", err)
+		_ = pr.Close()
+		_ = pw.Close()
+		return fmt.Errorf("failed to decode mp3: %w", err)
 	}
 
-	// Decode the MP3 stream from the buffered stream
-	decodedStream, err := mp3.DecodeWithSampleRate(44100, bs)
-	if err != nil {
-		_ = bs.Close()
-		return nil, fmt.Errorf("failed to decode mp3: %w", err)
-	}
-
-	// Store the buffered stream and create a new player, then start playback
-	p.bufferedStream = bs
+	// Store the pipe reader (for closing) and create a new player, then start playback
+	p.stream = pr
 	p.player = p.ctx.NewPlayer(decodedStream)
 	p.player.Play()
 
-	return statsChan, nil
+	return nil
 }
 
 // Stop halts the current audio playback and closes the associated stream.
@@ -83,10 +105,6 @@ func (p *Player) Stop() {
 	if p.player != nil {
 		_ = p.player.Close()
 		p.player = nil
-	}
-	if p.bufferedStream != nil {
-		_ = p.bufferedStream.Close()
-		p.bufferedStream = nil
 	}
 	if p.stream != nil {
 		_ = p.stream.Close()
