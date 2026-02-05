@@ -42,6 +42,8 @@ type model struct {
 	searchQuery   string   // Current search query
 	searchMatches []int    // Indices of matching items
 	currentMatch  int      // Current position in searchMatches (-1 if none)
+	// MPRIS integration
+	mpris *MPRIS
 }
 
 // channelsLoadedMsg is a message sent when channels are successfully loaded.
@@ -70,6 +72,12 @@ type streamErrorMsg struct{}
 
 // channelRefreshTickMsg is a message sent when it's time to refresh channels.
 type channelRefreshTickMsg struct{}
+
+// MPRIS control messages
+type mprisPlayMsg struct{}
+type mprisStopMsg struct{}
+type mprisNextMsg struct{}
+type mprisPrevMsg struct{}
 
 // Init initializes the application, loading channels asynchronously.
 func (m *model) Init() tea.Cmd {
@@ -174,6 +182,37 @@ func (m *model) isMatch(idx int) bool {
 	return false
 }
 
+// getPlayingChannel returns the currently playing channel, or nil if not playing.
+func (m *model) getPlayingChannel() *Channel {
+	if m.playingID == "" {
+		return nil
+	}
+	for _, listItem := range m.list.Items() {
+		if i, ok := listItem.(item); ok && i.channel.ID == m.playingID {
+			return &i.channel
+		}
+	}
+	return nil
+}
+
+// updateMPRIS updates MPRIS metadata based on current playback state.
+func (m *model) updateMPRIS() {
+	if m.mpris == nil {
+		return
+	}
+	ch := m.getPlayingChannel()
+	if ch == nil {
+		m.mpris.SetStopped()
+		return
+	}
+	track := ""
+	if m.trackInfo != nil {
+		track = m.trackInfo.Title
+	}
+	// Use channel title as artist since SomaFM streams don't have separate artist info
+	m.mpris.SetPlaying(ch.Title, track, ch.Title)
+}
+
 // playChannel starts playing the given channel.
 func (m *model) playChannel(i item) tea.Cmd {
 	m.playingID = i.channel.ID
@@ -203,6 +242,9 @@ func (m *model) playChannel(i item) tea.Cmd {
 	m.metadataReader = NewMetadataReader(streamURL)
 	m.metadataReader.Start()
 	m.trackInfo = nil
+
+	// Update MPRIS
+	m.updateMPRIS()
 
 	return m.pollTrackUpdates()
 }
@@ -274,6 +316,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.playingID = ""
 				m.stopMetadataReader()
 				m.trackInfo = nil
+				m.updateMPRIS()
 			}
 		case "a":
 			m.showAbout = true
@@ -358,8 +401,52 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case trackUpdateMsg:
 		// Track information has been updated
 		m.trackInfo = &msg.trackInfo
+		m.updateMPRIS()
 	case streamErrorMsg:
 		m.playingID = ""
+		m.updateMPRIS()
+
+	// MPRIS control messages
+	case mprisPlayMsg:
+		// Play the currently selected channel
+		if m.playingID == "" {
+			if i, ok := m.list.SelectedItem().(item); ok {
+				return m, m.playChannel(i)
+			}
+		}
+	case mprisStopMsg:
+		if m.player != nil && m.playingID != "" {
+			m.player.Stop()
+			m.playingID = ""
+			m.stopMetadataReader()
+			m.trackInfo = nil
+			m.updateMPRIS()
+		}
+	case mprisNextMsg:
+		// Move to next channel and play
+		items := m.list.Items()
+		if len(items) > 0 {
+			currentIdx := m.list.Index()
+			nextIdx := (currentIdx + 1) % len(items)
+			m.list.Select(nextIdx)
+			if i, ok := m.list.SelectedItem().(item); ok {
+				return m, m.playChannel(i)
+			}
+		}
+	case mprisPrevMsg:
+		// Move to previous channel and play
+		items := m.list.Items()
+		if len(items) > 0 {
+			currentIdx := m.list.Index()
+			prevIdx := currentIdx - 1
+			if prevIdx < 0 {
+				prevIdx = len(items) - 1
+			}
+			m.list.Select(prevIdx)
+			if i, ok := m.list.SelectedItem().(item); ok {
+				return m, m.playChannel(i)
+			}
+		}
 	}
 
 	// Update the list component and return its command
