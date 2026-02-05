@@ -7,7 +7,6 @@ This is a list of features and improvements I'm considering for future versions 
 ## Features
 
 - [ ] Implement desktop notifications for song changes.
-- [ ] Implement an MPRIS interface for Linux for better desktop integration.
 - [ ] Add support for hardware media keys (play/pause, etc.).
 
 ## Packaging & Installation

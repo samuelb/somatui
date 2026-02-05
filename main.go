@@ -38,11 +38,19 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Initialize MPRIS for desktop integration (Linux only)
+	mpris, err := NewMPRIS()
+	if err != nil {
+		// MPRIS is optional, continue without it
+		fmt.Fprintf(os.Stderr, "Warning: MPRIS initialization failed: %v\n", err)
+	}
+
 	// Create the main application model (need playing ID for delegate)
 	m := &model{
 		player:  player,
 		loading: true,
 		state:   state,
+		mpris:   mpris,
 		about: aboutInfo{
 			Version: version,
 			Commit:  commit,
@@ -75,8 +83,19 @@ func main() {
 	}
 	m.list = l
 
+	// Clean up MPRIS on exit
+	if mpris != nil {
+		defer mpris.Close()
+	}
+
 	// Start the Bubble Tea program with window size handling
 	p := tea.NewProgram(m, tea.WithAltScreen())
+
+	// Set MPRIS sender to allow D-Bus commands to control the player
+	if mpris != nil {
+		mpris.SetSender(p)
+	}
+
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("Alas, there's been an error: %v\n", err)
 		os.Exit(1)

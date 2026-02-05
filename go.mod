@@ -8,6 +8,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/charmbracelet/x/ansi v0.11.5
 	github.com/ebitengine/oto/v3 v3.4.0
+	github.com/godbus/dbus/v5 v5.2.2
 	github.com/hajimehoshi/ebiten/v2 v2.9.8
 )
 
