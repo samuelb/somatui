@@ -4,6 +4,8 @@ package main
 
 import (
 	"fmt"
+	"strings"
+	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/godbus/dbus/v5"
@@ -184,6 +186,11 @@ func (m *MPRIS) SetPlaying(station, track, artist string) {
 		return
 	}
 
+	// Sanitize strings to ensure valid UTF8 for D-Bus
+	station = sanitizeUTF8(station)
+	track = sanitizeUTF8(track)
+	artist = sanitizeUTF8(artist)
+
 	metadata := map[string]dbus.Variant{
 		"mpris:trackid": dbus.MakeVariant(dbus.ObjectPath("/org/mpris/MediaPlayer2/Track/1")),
 		"xesam:title":   dbus.MakeVariant(track),
@@ -210,6 +217,11 @@ func (m *MPRIS) SetMetadata(station, track, artist string) {
 		return
 	}
 
+	// Sanitize strings to ensure valid UTF8 for D-Bus
+	station = sanitizeUTF8(station)
+	track = sanitizeUTF8(track)
+	artist = sanitizeUTF8(artist)
+
 	metadata := map[string]dbus.Variant{
 		"mpris:trackid": dbus.MakeVariant(dbus.ObjectPath("/org/mpris/MediaPlayer2/Track/1")),
 		"xesam:title":   dbus.MakeVariant(track),
@@ -226,6 +238,21 @@ func (m *MPRIS) Close() {
 		m.conn.ReleaseName(busName)
 		m.conn.Close()
 	}
+}
+
+// sanitizeUTF8 removes invalid UTF8 characters from a string.
+// D-Bus requires all strings to be valid UTF8.
+func sanitizeUTF8(s string) string {
+	if utf8.ValidString(s) {
+		return s
+	}
+	var b strings.Builder
+	for _, r := range s {
+		if r != utf8.RuneError {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 // org.mpris.MediaPlayer2 methods
