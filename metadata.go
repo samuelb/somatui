@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -31,7 +32,7 @@ type MetadataReader struct {
 func NewMetadataReader(url string) *MetadataReader {
 	return &MetadataReader{
 		url:        url,
-		client:     &http.Client{Timeout: 15 * time.Second},
+		client:     &http.Client{},
 		stopChan:   make(chan struct{}),
 		updateChan: make(chan TrackInfo, 1),
 	}
@@ -75,7 +76,10 @@ func (mr *MetadataReader) GetUpdateChan() <-chan TrackInfo {
 
 // getMetadata fetches ICY metadata directly from the MP3 stream.
 func (mr *MetadataReader) getMetadata() (TrackInfo, error) {
-	req, err := http.NewRequest("GET", mr.url, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", mr.url, nil)
 	if err != nil {
 		return TrackInfo{}, fmt.Errorf("failed to create request: %w", err)
 	}

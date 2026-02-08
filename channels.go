@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -96,8 +97,16 @@ func writeChannelsToCache(channels *Channels) error {
 
 // fetchChannelsFromNetwork fetches channel data from the SomaFM API.
 func fetchChannelsFromNetwork() (*Channels, error) {
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Get(somafmChannelsURL)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	client := &http.Client{}
+	req, err := http.NewRequestWithContext(ctx, "GET", somafmChannelsURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch channels from network: %w", err)
 	}
