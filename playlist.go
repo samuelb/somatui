@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -15,8 +16,16 @@ const plsFilePrefix = "File1="
 // It supports .pls playlist formats.
 func getStreamURLFromPlaylist(playlistURL string) (string, error) {
 	// Fetch the playlist file content
-	client := &http.Client{Timeout: 15 * time.Second}
-	resp, err := client.Get(playlistURL)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	client := &http.Client{}
+	req, err := http.NewRequestWithContext(ctx, "GET", playlistURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to get playlist from %s: %w", playlistURL, err)
 	}
