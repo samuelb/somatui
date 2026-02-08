@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -63,10 +62,7 @@ func (p *Player) Play(url string) error {
 	go func() {
 		defer func() { _ = pw.Close() }()
 
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-
-		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
 			pw.CloseWithError(fmt.Errorf("failed to create request: %w", err))
 			return
