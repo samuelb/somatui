@@ -27,7 +27,7 @@ type aboutInfo struct {
 // model represents the application's state.
 type model struct {
 	list           list.Model
-	player         *Player
+	player         AudioPlayer
 	playingID      string // ID of the playing channel, empty if not playing
 	loading        bool
 	err            error
