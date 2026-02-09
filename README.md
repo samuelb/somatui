@@ -6,7 +6,7 @@
 
 **✨ This project was entirely vibe-coded. ✨**
 
-A modern, TUI (Terminal User Interface) client for streaming and exploring SomaFM radio channels.
+A modern, TUI (Terminal User Interface) client for streaming and exploring SomaFM radio channels. Built for Linux and macOS — other platforms are not supported and may not work.
 
 ![SomaTUI Demo](demo.gif)
 
@@ -55,6 +55,21 @@ Then, you can run it from your terminal.
 ### Build from Source
 
 Prerequisites: Go 1.24 or newer
+
+On Linux, the ALSA development library is required for audio support:
+
+```sh
+# Debian/Ubuntu
+sudo apt-get install libasound2-dev
+
+# Fedora
+sudo dnf install alsa-lib-devel
+
+# Arch
+sudo pacman -S alsa-lib
+```
+
+Then build:
 
 ```sh
 git clone https://github.com/samuelb/somatui.git
