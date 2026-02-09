@@ -17,6 +17,13 @@ const (
 	fadeSteps       = 20
 )
 
+// AudioPlayer is the interface for audio playback operations.
+// This allows mocking the player in tests.
+type AudioPlayer interface {
+	Play(url string) error
+	Stop()
+}
+
 // Player manages the audio playback for SomaFM streams.
 type Player struct {
 	ctx        *oto.Context

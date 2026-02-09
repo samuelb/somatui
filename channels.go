@@ -38,10 +38,12 @@ type Channels struct {
 }
 
 const (
-	cacheFileName     = "somafm_channels.json"
-	appCacheDirName   = "somatui"
-	somafmChannelsURL = "https://somafm.com/channels.json"
+	cacheFileName   = "somafm_channels.json"
+	appCacheDirName = "somatui"
 )
+
+// somafmChannelsURL is a var to allow overriding in tests.
+var somafmChannelsURL = "https://somafm.com/channels.json"
 
 // getCacheFilePath returns the absolute path to the cache file.
 func getCacheFilePath() (string, error) {
