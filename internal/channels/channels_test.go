@@ -1,4 +1,4 @@
-package main
+package channels
 
 import (
 	"encoding/json"
@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// setCacheDir sets XDG_CACHE_HOME to a temp dir for testing.
-func setCacheDir(t *testing.T) string {
+// SetCacheDir sets XDG_CACHE_HOME to a temp dir for testing.
+func SetCacheDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", dir)
@@ -47,12 +47,12 @@ var testChannelData = Channels{
 }
 
 func TestWriteAndReadChannelsFromCache(t *testing.T) {
-	setCacheDir(t)
+	SetCacheDir(t)
 
-	err := writeChannelsToCache(&testChannelData)
+	err := WriteChannelsToCache(&testChannelData)
 	require.NoError(t, err)
 
-	loaded, err := readChannelsFromCache()
+	loaded, err := ReadChannelsFromCache()
 	require.NoError(t, err)
 	assert.Equal(t, len(testChannelData.Channels), len(loaded.Channels))
 	assert.Equal(t, "groovesalad", loaded.Channels[0].ID)
@@ -62,28 +62,28 @@ func TestWriteAndReadChannelsFromCache(t *testing.T) {
 }
 
 func TestReadChannelsFromCache_NoFile(t *testing.T) {
-	setCacheDir(t)
+	SetCacheDir(t)
 
-	channels, err := readChannelsFromCache()
+	channels, err := ReadChannelsFromCache()
 	assert.Error(t, err)
 	assert.Nil(t, channels)
 }
 
 func TestReadChannelsFromCache_CorruptJSON(t *testing.T) {
-	dir := setCacheDir(t)
+	dir := SetCacheDir(t)
 
 	cacheDir := filepath.Join(dir, appCacheDirName)
 	require.NoError(t, os.MkdirAll(cacheDir, 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(cacheDir, cacheFileName), []byte("not json"), 0644))
 
-	channels, err := readChannelsFromCache()
+	channels, err := ReadChannelsFromCache()
 	assert.Error(t, err)
 	assert.Nil(t, channels)
 	assert.Contains(t, err.Error(), "unmarshal")
 }
 
 func TestFetchChannelsFromNetwork(t *testing.T) {
-	setCacheDir(t)
+	SetCacheDir(t)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -93,60 +93,60 @@ func TestFetchChannelsFromNetwork(t *testing.T) {
 	defer server.Close()
 
 	// Override the URL for testing
-	originalURL := somafmChannelsURL
-	somafmChannelsURL = server.URL
-	t.Cleanup(func() { somafmChannelsURL = originalURL })
+	originalURL := SomaFMChannelsURL
+	SomaFMChannelsURL = server.URL
+	t.Cleanup(func() { SomaFMChannelsURL = originalURL })
 
-	channels, err := fetchChannelsFromNetwork()
+	channels, err := FetchChannelsFromNetwork("SomaTUI/test")
 	require.NoError(t, err)
 	assert.Equal(t, 2, len(channels.Channels))
 	assert.Equal(t, "groovesalad", channels.Channels[0].ID)
 
 	// Verify it was also cached
-	cached, err := readChannelsFromCache()
+	cached, err := ReadChannelsFromCache()
 	require.NoError(t, err)
 	assert.Equal(t, len(channels.Channels), len(cached.Channels))
 }
 
 func TestFetchChannelsFromNetwork_ServerError(t *testing.T) {
-	setCacheDir(t)
+	SetCacheDir(t)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer server.Close()
 
-	originalURL := somafmChannelsURL
-	somafmChannelsURL = server.URL
-	t.Cleanup(func() { somafmChannelsURL = originalURL })
+	originalURL := SomaFMChannelsURL
+	SomaFMChannelsURL = server.URL
+	t.Cleanup(func() { SomaFMChannelsURL = originalURL })
 
-	channels, err := fetchChannelsFromNetwork()
+	channels, err := FetchChannelsFromNetwork("SomaTUI/test")
 	assert.Error(t, err)
 	assert.Nil(t, channels)
 	assert.Contains(t, err.Error(), "500")
 }
 
 func TestFetchChannelsFromNetwork_InvalidJSON(t *testing.T) {
-	setCacheDir(t)
+	SetCacheDir(t)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("not json"))
 	}))
 	defer server.Close()
 
-	originalURL := somafmChannelsURL
-	somafmChannelsURL = server.URL
-	t.Cleanup(func() { somafmChannelsURL = originalURL })
+	originalURL := SomaFMChannelsURL
+	SomaFMChannelsURL = server.URL
+	t.Cleanup(func() { SomaFMChannelsURL = originalURL })
 
-	channels, err := fetchChannelsFromNetwork()
+	channels, err := FetchChannelsFromNetwork("SomaTUI/test")
 	assert.Error(t, err)
 	assert.Nil(t, channels)
 }
 
 func TestGetCacheFilePath(t *testing.T) {
-	setCacheDir(t)
+	SetCacheDir(t)
 
-	path, err := getCacheFilePath()
+	path, err := GetCacheFilePath()
 	require.NoError(t, err)
 	assert.Contains(t, path, appCacheDirName)
 	assert.Contains(t, path, cacheFileName)

@@ -1,6 +1,6 @@
 //go:build linux
 
-package main
+package platform
 
 import (
 	"fmt"
@@ -20,9 +20,9 @@ const (
 	busName         = "org.mpris.MediaPlayer2.somatui"
 )
 
-// MPRISCmdSender is an interface for sending commands to the application.
+// CmdSender is an interface for sending commands to the application.
 // This matches the tea.Program's Send method signature.
-type MPRISCmdSender interface {
+type CmdSender interface {
 	Send(msg tea.Msg)
 }
 
@@ -30,7 +30,7 @@ type MPRISCmdSender interface {
 type MPRIS struct {
 	conn   *dbus.Conn
 	props  *prop.Properties
-	sender MPRISCmdSender
+	sender CmdSender
 }
 
 // mprisRoot implements org.mpris.MediaPlayer2 interface.
@@ -185,7 +185,7 @@ func NewMPRIS() (*MPRIS, error) {
 }
 
 // SetSender sets the command sender for MPRIS control messages.
-func (m *MPRIS) SetSender(sender MPRISCmdSender) {
+func (m *MPRIS) SetSender(sender CmdSender) {
 	m.sender = sender
 }
 
@@ -196,9 +196,9 @@ func (m *MPRIS) SetPlaying(station, track, artist string) {
 	}
 
 	// Sanitize strings to ensure valid UTF8 for D-Bus
-	station = sanitizeUTF8(station)
-	track = sanitizeUTF8(track)
-	artist = sanitizeUTF8(artist)
+	station = SanitizeUTF8(station)
+	track = SanitizeUTF8(track)
+	artist = SanitizeUTF8(artist)
 
 	metadata := map[string]dbus.Variant{
 		"mpris:trackid": dbus.MakeVariant(dbus.ObjectPath("/org/mpris/MediaPlayer2/Track/1")),
@@ -227,9 +227,9 @@ func (m *MPRIS) SetMetadata(station, track, artist string) {
 	}
 
 	// Sanitize strings to ensure valid UTF8 for D-Bus
-	station = sanitizeUTF8(station)
-	track = sanitizeUTF8(track)
-	artist = sanitizeUTF8(artist)
+	station = SanitizeUTF8(station)
+	track = SanitizeUTF8(track)
+	artist = SanitizeUTF8(artist)
 
 	metadata := map[string]dbus.Variant{
 		"mpris:trackid": dbus.MakeVariant(dbus.ObjectPath("/org/mpris/MediaPlayer2/Track/1")),
@@ -249,9 +249,9 @@ func (m *MPRIS) Close() {
 	}
 }
 
-// sanitizeUTF8 removes invalid UTF8 characters from a string.
+// SanitizeUTF8 removes invalid UTF8 characters from a string.
 // D-Bus requires all strings to be valid UTF8.
-func sanitizeUTF8(s string) string {
+func SanitizeUTF8(s string) string {
 	if utf8.ValidString(s) {
 		return s
 	}
@@ -276,44 +276,59 @@ func (r *mprisRoot) Quit() *dbus.Error {
 
 // org.mpris.MediaPlayer2.Player methods
 
+// MPRISPlayMsg is sent when MPRIS requests to play.
+type MPRISPlayMsg struct{}
+
+// MPRISStopMsg is sent when MPRIS requests to stop.
+type MPRISStopMsg struct{}
+
+// MPRISPlayPauseMsg is sent when MPRIS requests to toggle play/pause.
+type MPRISPlayPauseMsg struct{}
+
+// MPRISNextMsg is sent when MPRIS requests to go to next track.
+type MPRISNextMsg struct{}
+
+// MPRISPrevMsg is sent when MPRIS requests to go to previous track.
+type MPRISPrevMsg struct{}
+
 func (p *mprisPlayer) Next() *dbus.Error {
 	if p.mpris.sender != nil {
-		p.mpris.sender.Send(mprisNextMsg{})
+		p.mpris.sender.Send(MPRISNextMsg{})
 	}
 	return nil
 }
 
 func (p *mprisPlayer) Previous() *dbus.Error {
 	if p.mpris.sender != nil {
-		p.mpris.sender.Send(mprisPrevMsg{})
+		p.mpris.sender.Send(MPRISPrevMsg{})
 	}
 	return nil
 }
 
 func (p *mprisPlayer) Pause() *dbus.Error {
 	if p.mpris.sender != nil {
-		p.mpris.sender.Send(mprisStopMsg{})
+		p.mpris.sender.Send(MPRISStopMsg{})
 	}
 	return nil
 }
 
 func (p *mprisPlayer) PlayPause() *dbus.Error {
 	if p.mpris.sender != nil {
-		p.mpris.sender.Send(mprisPlayPauseMsg{})
+		p.mpris.sender.Send(MPRISPlayPauseMsg{})
 	}
 	return nil
 }
 
 func (p *mprisPlayer) Stop() *dbus.Error {
 	if p.mpris.sender != nil {
-		p.mpris.sender.Send(mprisStopMsg{})
+		p.mpris.sender.Send(MPRISStopMsg{})
 	}
 	return nil
 }
 
 func (p *mprisPlayer) Play() *dbus.Error {
 	if p.mpris.sender != nil {
-		p.mpris.sender.Send(mprisPlayMsg{})
+		p.mpris.sender.Send(MPRISPlayMsg{})
 	}
 	return nil
 }

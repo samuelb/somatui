@@ -1,4 +1,4 @@
-package main
+package playlist
 
 import (
 	"net/http"
@@ -82,23 +82,23 @@ Version=2`,
 			}))
 			defer server.Close()
 
-			got, err := getStreamURLFromPlaylist(server.URL)
+			got, err := GetStreamURLFromPlaylist(server.URL, "SomaTUI/test")
 
 			if (err != nil) != tt.wantErr {
-				t.Errorf("getStreamURLFromPlaylist() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("GetStreamURLFromPlaylist() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 
 			if !tt.wantErr && got != tt.wantURL {
-				t.Errorf("getStreamURLFromPlaylist() = %v, want %v", got, tt.wantURL)
+				t.Errorf("GetStreamURLFromPlaylist() = %v, want %v", got, tt.wantURL)
 			}
 		})
 	}
 }
 
 func TestGetStreamURLFromPlaylistInvalidURL(t *testing.T) {
-	_, err := getStreamURLFromPlaylist("http://invalid-url-that-does-not-exist.example.com/playlist.pls")
+	_, err := GetStreamURLFromPlaylist("http://invalid-url-that-does-not-exist.example.com/playlist.pls", "SomaTUI/test")
 	if err == nil {
-		t.Error("getStreamURLFromPlaylist() should return error for invalid URL")
+		t.Error("GetStreamURLFromPlaylist() should return error for invalid URL")
 	}
 }

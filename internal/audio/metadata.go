@@ -1,4 +1,4 @@
-package main
+package audio
 
 import (
 	"bufio"
@@ -39,20 +39,20 @@ func NewMetadataReader(url string) *MetadataReader {
 }
 
 // Start begins monitoring the stream for metadata updates.
-func (mr *MetadataReader) Start() {
+func (mr *MetadataReader) Start(userAgent string) {
 	go func() {
 		ticker := time.NewTicker(metadataCheckInterval)
 		defer ticker.Stop()
 
 		// Get initial metadata
-		if trackInfo, err := mr.getMetadata(); err == nil {
+		if trackInfo, err := mr.getMetadata(userAgent); err == nil {
 			mr.updateChan <- trackInfo
 		}
 
 		for {
 			select {
 			case <-ticker.C:
-				if trackInfo, err := mr.getMetadata(); err == nil {
+				if trackInfo, err := mr.getMetadata(userAgent); err == nil {
 					mr.updateChan <- trackInfo
 				}
 			case <-mr.stopChan:
@@ -75,7 +75,7 @@ func (mr *MetadataReader) GetUpdateChan() <-chan TrackInfo {
 }
 
 // getMetadata fetches ICY metadata directly from the MP3 stream.
-func (mr *MetadataReader) getMetadata() (TrackInfo, error) {
+func (mr *MetadataReader) getMetadata(userAgent string) (TrackInfo, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
@@ -84,7 +84,7 @@ func (mr *MetadataReader) getMetadata() (TrackInfo, error) {
 		return TrackInfo{}, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Set("User-Agent", userAgent())
+	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Icy-MetaData", "1") // Request metadata
 
 	resp, err := mr.client.Do(req)

@@ -1,4 +1,4 @@
-package main
+package audio
 
 import (
 	"bytes"
@@ -229,7 +229,7 @@ func TestGetMetadata(t *testing.T) {
 	defer server.Close()
 
 	mr := NewMetadataReader(server.URL)
-	info, err := mr.getMetadata()
+	info, err := mr.getMetadata("SomaTUI/test")
 
 	require.NoError(t, err)
 	assert.Equal(t, "Server Song", info.Title)
@@ -248,10 +248,10 @@ func TestGetMetadata_VerifiesHeaders(t *testing.T) {
 	defer server.Close()
 
 	mr := NewMetadataReader(server.URL)
-	_, err := mr.getMetadata()
+	_, err := mr.getMetadata("SomaTUI/test")
 	require.NoError(t, err)
 
-	assert.Equal(t, userAgent(), gotUserAgent)
+	assert.Equal(t, "SomaTUI/test", gotUserAgent)
 	assert.Equal(t, "1", gotIcyMetaData)
 }
 
@@ -264,7 +264,7 @@ func TestGetMetadata_NoIcyMetaint(t *testing.T) {
 	defer server.Close()
 
 	mr := NewMetadataReader(server.URL)
-	_, err := mr.getMetadata()
+	_, err := mr.getMetadata("SomaTUI/test")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "ICY metadata")
 }
@@ -276,7 +276,7 @@ func TestGetMetadata_ServerError(t *testing.T) {
 	defer server.Close()
 
 	mr := NewMetadataReader(server.URL)
-	_, err := mr.getMetadata()
+	_, err := mr.getMetadata("SomaTUI/test")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "500")
 }
@@ -286,7 +286,7 @@ func TestMetadataReaderStartStop(t *testing.T) {
 	defer server.Close()
 
 	mr := NewMetadataReader(server.URL)
-	mr.Start()
+	mr.Start("SomaTUI/test")
 
 	// Should receive the initial metadata update
 	select {

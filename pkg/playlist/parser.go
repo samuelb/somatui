@@ -1,4 +1,4 @@
-package main
+package playlist
 
 import (
 	"bufio"
@@ -11,10 +11,10 @@ import (
 
 const plsFilePrefix = "File1="
 
-// getStreamURLFromPlaylist fetches a playlist file from a URL, parses it,
+// GetStreamURLFromPlaylist fetches a playlist file from a URL, parses it,
 // and returns the first stream URL found within the playlist.
 // It supports .pls playlist formats.
-func getStreamURLFromPlaylist(playlistURL string) (string, error) {
+func GetStreamURLFromPlaylist(playlistURL, userAgent string) (string, error) {
 	// Fetch the playlist file content
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -25,7 +25,7 @@ func getStreamURLFromPlaylist(playlistURL string) (string, error) {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Set("User-Agent", userAgent())
+	req.Header.Set("User-Agent", userAgent)
 
 	resp, err := client.Do(req)
 	if err != nil {

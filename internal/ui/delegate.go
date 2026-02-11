@@ -1,4 +1,4 @@
-package main
+package ui
 
 import (
 	"fmt"
@@ -7,37 +7,38 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"somatui/internal/channels"
 )
 
-// item implements the list.Item interface for displaying channels.
-type item struct {
-	channel Channel
+// Item implements the list.Item interface for displaying channels.
+type Item struct {
+	Channel channels.Channel
 }
 
 // Title returns the title of the channel for display in the list.
-func (i item) Title() string {
-	return i.channel.Title
+func (i Item) Title() string {
+	return i.Channel.Title
 }
 
 // Description returns the description of the channel for display in the list.
-func (i item) Description() string { return i.channel.Description }
+func (i Item) Description() string { return i.Channel.Description }
 
 // FilterValue returns the title of the channel for filtering purposes.
-func (i item) FilterValue() string { return i.channel.Title }
+func (i Item) FilterValue() string { return i.Channel.Title }
 
 // Listeners returns the listener count for display.
-func (i item) Listeners() string { return i.channel.Listeners }
+func (i Item) Listeners() string { return i.Channel.Listeners }
 
-// styledDelegate is a custom delegate for styling list items.
-type styledDelegate struct {
+// StyledDelegate is a custom delegate for styling list items.
+type StyledDelegate struct {
 	list.DefaultDelegate
-	playingID       *string
-	matchChecker    func(int) bool // Function to check if index is a search match
-	favoriteChecker func(int) bool // Function to check if index is a favorite
+	PlayingID       *string
+	MatchChecker    func(int) bool // Function to check if index is a search match
+	FavoriteChecker func(int) bool // Function to check if index is a favorite
 }
 
-// newStyledDelegate creates a styled delegate for the list.
-func newStyledDelegate(playingID *string, matchChecker func(int) bool, favoriteChecker func(int) bool) styledDelegate {
+// NewStyledDelegate creates a styled delegate for the list.
+func NewStyledDelegate(playingID *string, matchChecker func(int) bool, favoriteChecker func(int) bool) StyledDelegate {
 	d := list.NewDefaultDelegate()
 
 	// Normal item styles
@@ -46,38 +47,38 @@ func newStyledDelegate(playingID *string, matchChecker func(int) bool, favoriteC
 		Padding(0, 0, 0, 2)
 
 	d.Styles.NormalDesc = lipgloss.NewStyle().
-		Foreground(subtleColor).
+		Foreground(SubtleColor).
 		Padding(0, 0, 0, 2)
 
 	// Selected item styles
 	d.Styles.SelectedTitle = lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder(), false, false, false, true).
-		BorderForeground(primaryColor).
-		Foreground(primaryColor).
+		BorderForeground(PrimaryColor).
+		Foreground(PrimaryColor).
 		Bold(true).
 		Padding(0, 0, 0, 1)
 
 	d.Styles.SelectedDesc = lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder(), false, false, false, true).
-		BorderForeground(primaryColor).
+		BorderForeground(PrimaryColor).
 		Foreground(lipgloss.Color("#CCCCCC")).
 		Padding(0, 0, 0, 1)
 
-	return styledDelegate{DefaultDelegate: d, playingID: playingID, matchChecker: matchChecker, favoriteChecker: favoriteChecker}
+	return StyledDelegate{DefaultDelegate: d, PlayingID: playingID, MatchChecker: matchChecker, FavoriteChecker: favoriteChecker}
 }
 
 // Render renders a list item with custom styling, including a playing indicator.
-func (d styledDelegate) Render(w io.Writer, m list.Model, index int, listItem list.Item) {
-	i, ok := listItem.(item)
+func (d StyledDelegate) Render(w io.Writer, m list.Model, index int, listItem list.Item) {
+	i, ok := listItem.(Item)
 	if !ok {
 		return
 	}
 
 	// Check if this item is currently playing
-	isPlaying := d.playingID != nil && *d.playingID == i.channel.ID
+	isPlaying := d.PlayingID != nil && *d.PlayingID == i.Channel.ID
 	isSelected := index == m.Index()
-	isMatch := d.matchChecker != nil && d.matchChecker(index)
-	isFavorite := d.favoriteChecker != nil && d.favoriteChecker(index)
+	isMatch := d.MatchChecker != nil && d.MatchChecker(index)
+	isFavorite := d.FavoriteChecker != nil && d.FavoriteChecker(index)
 
 	// Build title with playing/favorite indicator
 	title := i.Title()
@@ -89,11 +90,11 @@ func (d styledDelegate) Render(w io.Writer, m list.Model, index int, listItem li
 	}
 
 	// Calculate column widths
-	leftColWidth, listenerColWidth := calculateColumnWidths(m.Width())
+	leftColWidth, listenerColWidth := CalculateColumnWidths(m.Width())
 
 	// Listener count styles
 	listenerStyle := lipgloss.NewStyle().
-		Foreground(subtleColor).
+		Foreground(SubtleColor).
 		Width(listenerColWidth).
 		Align(lipgloss.Right)
 
@@ -103,12 +104,12 @@ func (d styledDelegate) Render(w io.Writer, m list.Model, index int, listItem li
 		Align(lipgloss.Right)
 
 	listenerPlayingStyle := lipgloss.NewStyle().
-		Foreground(playingColor).
+		Foreground(PlayingColor).
 		Width(listenerColWidth).
 		Align(lipgloss.Right)
 
 	listenerMatchStyle := lipgloss.NewStyle().
-		Foreground(searchMatchColor).
+		Foreground(SearchMatchColor).
 		Width(listenerColWidth).
 		Align(lipgloss.Right)
 
@@ -127,11 +128,11 @@ func (d styledDelegate) Render(w io.Writer, m list.Model, index int, listItem li
 	} else if isPlaying {
 		// Playing but not selected - show green indicator
 		playingTitleStyle := lipgloss.NewStyle().
-			Foreground(playingColor).
+			Foreground(PlayingColor).
 			Padding(0, 0, 0, 2).
 			Width(leftColWidth)
 		playingDescStyle := lipgloss.NewStyle().
-			Foreground(subtleColor).
+			Foreground(SubtleColor).
 			Padding(0, 0, 0, 2).
 			Width(leftColWidth)
 		titleStr = playingTitleStyle.Render(title)
@@ -140,11 +141,11 @@ func (d styledDelegate) Render(w io.Writer, m list.Model, index int, listItem li
 	} else if isMatch {
 		// Search match - highlight with match color
 		matchTitleStyle := lipgloss.NewStyle().
-			Foreground(searchMatchColor).
+			Foreground(SearchMatchColor).
 			Padding(0, 0, 0, 2).
 			Width(leftColWidth)
 		matchDescStyle := lipgloss.NewStyle().
-			Foreground(subtleColor).
+			Foreground(SubtleColor).
 			Padding(0, 0, 0, 2).
 			Width(leftColWidth)
 		titleStr = matchTitleStyle.Render(title)
@@ -163,4 +164,19 @@ func (d styledDelegate) Render(w io.Writer, m list.Model, index int, listItem li
 	descRow := descStr
 
 	_, _ = fmt.Fprintf(w, "%s\n%s", titleRow, descRow)
+}
+
+const (
+	listenerColumnWidth = 12
+	minLeftColumnWidth  = 20
+)
+
+// CalculateColumnWidths returns the left and listener column widths for a given total width.
+func CalculateColumnWidths(totalWidth int) (leftCol, listenerCol int) {
+	listenerCol = listenerColumnWidth
+	leftCol = totalWidth - listenerCol - 4
+	if leftCol < minLeftColumnWidth {
+		leftCol = minLeftColumnWidth
+	}
+	return
 }

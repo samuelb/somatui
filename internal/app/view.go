@@ -1,0 +1,215 @@
+package app
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
+	"somatui/internal/channels"
+	"somatui/internal/ui"
+)
+
+// RenderHeader renders the list header with column titles.
+func (m *Model) RenderHeader() string {
+	leftColWidth, listenerColWidth := ui.CalculateColumnWidths(m.List.Width())
+
+	title := ui.TitleStyle.Width(leftColWidth).Render("SomaFM Stations")
+	listenerHeader := lipgloss.NewStyle().
+		Foreground(ui.SubtleColor).
+		Width(listenerColWidth).
+		Align(lipgloss.Right).
+		Render("Listeners")
+
+	return lipgloss.JoinHorizontal(lipgloss.Bottom, title, listenerHeader)
+}
+
+// RenderSearchBar renders the search input bar.
+func (m *Model) RenderSearchBar() string {
+	if m.Searching {
+		matchInfo := ""
+		if len(m.SearchMatches) > 0 {
+			matchInfo = fmt.Sprintf(" [%d/%d]", m.CurrentMatch+1, len(m.SearchMatches))
+		} else if m.SearchQuery != "" {
+			matchInfo = " [no matches]"
+		}
+		return ui.SearchBarStyle.Render(fmt.Sprintf("/%s%s", m.SearchQuery, matchInfo))
+	}
+	if m.SearchQuery != "" {
+		matchInfo := ""
+		if len(m.SearchMatches) > 0 {
+			matchInfo = fmt.Sprintf(" [%d/%d] (n/N navigate, c clear)", m.CurrentMatch+1, len(m.SearchMatches))
+		}
+		return ui.SearchBarStyle.Render(fmt.Sprintf("Search: %s%s", m.SearchQuery, matchInfo))
+	}
+	return ""
+}
+
+// RenderStatusBar renders the styled status bar.
+func (m *Model) RenderStatusBar(items []list.Item) string {
+	var icon, stateText string
+	var stateStyle lipgloss.Style
+
+	// Determine state and styling
+	if m.PlayingID == "" {
+		icon = "■"
+		stateText = "Stopped"
+		stateStyle = ui.StatusStoppedStyle
+	} else {
+		icon = "▶"
+		stateText = "Playing"
+		stateStyle = ui.StatusPlayingStyle
+	}
+
+	// Build the status line
+	parts := []string{stateStyle.Render(icon + " " + stateText)}
+
+	// Add channel name if playing
+	if m.PlayingID != "" {
+		for _, listItem := range items {
+			if i, ok := listItem.(ui.Item); ok && i.Channel.ID == m.PlayingID {
+				channelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF"))
+				parts = append(parts, channelStyle.Render(i.Channel.Title))
+				break
+			}
+		}
+	}
+
+	// Add track info with music note
+	if m.TrackInfo != nil && m.TrackInfo.Title != "" {
+		trackStr := "♫ " + m.TrackInfo.Title
+		parts = append(parts, ui.TrackInfoStyle.Render(trackStr))
+	}
+
+	return ui.StatusBarStyle.Render(strings.Join(parts, "  │  "))
+}
+
+// RenderAboutScreen renders the about dialog.
+func (m *Model) RenderAboutScreen() string {
+	content := fmt.Sprintf(`SomaTUI
+
+A terminal UI for SomaFM internet radio.
+
+Version:  %s
+Commit:   %s
+Built:    %s
+
+License:  MIT
+Author:   Samuel Barabas
+GitHub:   https://github.com/samuelb/somatui
+
+This project is not affiliated with SomaFM.
+All content and station streams are provided by somafm.com.
+
+Press any key to close`, m.About.Version, m.About.Commit, m.About.Date)
+
+	return ui.AboutBoxStyle.Render(content)
+}
+
+// PlaceOverlay places the foreground string on top of the background string
+// at the specified x, y position.
+func PlaceOverlay(x, y int, fg, bg string) string {
+	bgLines := strings.Split(bg, "\n")
+	fgLines := strings.Split(fg, "\n")
+
+	for i, fgLine := range fgLines {
+		bgLineIdx := y + i
+		if bgLineIdx < 0 || bgLineIdx >= len(bgLines) {
+			continue
+		}
+
+		bgLine := bgLines[bgLineIdx]
+		bgLineWidth := ansi.StringWidth(bgLine)
+
+		// Pad background line if needed
+		if bgLineWidth < x {
+			bgLine += strings.Repeat(" ", x-bgLineWidth)
+			bgLineWidth = x
+		}
+
+		// Build the new line: left part + foreground + right part
+		fgWidth := ansi.StringWidth(fgLine)
+		leftPart := ansi.Truncate(bgLine, x, "")
+		rightStart := x + fgWidth
+		var rightPart string
+		if rightStart < bgLineWidth {
+			rightPart = ansi.TruncateLeft(bgLine, bgLineWidth-rightStart, "")
+		}
+
+		bgLines[bgLineIdx] = leftPart + fgLine + rightPart
+	}
+
+	return strings.Join(bgLines, "\n")
+}
+
+// View renders the application's UI.
+func (m *Model) View() string {
+	items := m.List.Items()
+	// Display loading message if channels are still being fetched
+	if m.Loading {
+		return ui.LoadingStyle.Render("◌ Loading SomaFM channels...")
+	}
+
+	// Display error message if channel loading failed
+	if m.Err != nil {
+		errorContent := fmt.Sprintf("✕ Error loading channels\n\n%v\n\nPress 'q' to quit", m.Err)
+		return ui.ErrorBoxStyle.Render(errorContent)
+	}
+
+	// Build the main view using lipgloss layout
+	components := []string{
+		"", // Top margin
+		m.RenderHeader(),
+	}
+	if searchBar := m.RenderSearchBar(); searchBar != "" {
+		components = append(components, searchBar)
+	}
+	components = append(components, m.List.View(), m.RenderStatusBar(items))
+	mainView := lipgloss.JoinVertical(lipgloss.Left, components...)
+
+	// Overlay about screen if requested
+	if m.ShowAbout {
+		aboutBox := m.RenderAboutScreen()
+		// Calculate position to center the about box
+		aboutWidth := lipgloss.Width(aboutBox)
+		aboutHeight := lipgloss.Height(aboutBox)
+		x := (m.Width - aboutWidth) / 2
+		y := (m.Height - aboutHeight) / 2
+		if x < 0 {
+			x = 0
+		}
+		if y < 0 {
+			y = 0
+		}
+		return PlaceOverlay(x, y, aboutBox, mainView)
+	}
+
+	return mainView
+}
+
+// UpdateListSize recalculates and sets the list size based on current UI state.
+func (m *Model) UpdateListSize() {
+	// Dynamically calculate the height needed for the header and status bar
+	headerHeight := lipgloss.Height(m.RenderHeader())
+	statusBarHeight := lipgloss.Height(m.RenderStatusBar(nil))
+	searchBarHeight := 0
+	if searchBar := m.RenderSearchBar(); searchBar != "" {
+		searchBarHeight = lipgloss.Height(searchBar)
+	}
+
+	// Total height occupied by elements other than the list itself
+	totalFixedUIHeight := 1 + headerHeight + searchBarHeight + statusBarHeight + 1
+
+	// Update the list's dimensions
+	m.List.SetSize(m.Width, m.Height-totalFixedUIHeight)
+}
+
+// ChannelsToItems converts channels to list items.
+func ChannelsToItems(channels []channels.Channel) []list.Item {
+	items := make([]list.Item, len(channels))
+	for i, ch := range channels {
+		items[i] = ui.Item{Channel: ch}
+	}
+	return items
+}
