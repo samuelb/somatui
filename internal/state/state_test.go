@@ -1,4 +1,4 @@
-package main
+package state
 
 import (
 	"encoding/json"
@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// setStateDir sets XDG_STATE_HOME to a temp dir for testing and returns a cleanup function.
-func setStateDir(t *testing.T) string {
+// SetStateDir sets XDG_STATE_HOME to a temp dir for testing and returns a cleanup function.
+func SetStateDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", dir)
@@ -19,7 +19,7 @@ func setStateDir(t *testing.T) string {
 }
 
 func TestLoadState_NoFile(t *testing.T) {
-	setStateDir(t)
+	SetStateDir(t)
 
 	state, err := LoadState()
 	require.NoError(t, err)
@@ -28,7 +28,7 @@ func TestLoadState_NoFile(t *testing.T) {
 }
 
 func TestSaveAndLoadState_Roundtrip(t *testing.T) {
-	setStateDir(t)
+	SetStateDir(t)
 
 	original := &State{LastSelectedChannelID: "groovesalad"}
 	err := SaveState(original)
@@ -40,7 +40,7 @@ func TestSaveAndLoadState_Roundtrip(t *testing.T) {
 }
 
 func TestSaveState_OverwritesExisting(t *testing.T) {
-	setStateDir(t)
+	SetStateDir(t)
 
 	err := SaveState(&State{LastSelectedChannelID: "dronezone"})
 	require.NoError(t, err)
@@ -54,7 +54,7 @@ func TestSaveState_OverwritesExisting(t *testing.T) {
 }
 
 func TestLoadState_CorruptJSON(t *testing.T) {
-	dir := setStateDir(t)
+	dir := SetStateDir(t)
 
 	// Write corrupt data to the state file
 	stateDir := filepath.Join(dir, appDirName)
@@ -68,7 +68,7 @@ func TestLoadState_CorruptJSON(t *testing.T) {
 }
 
 func TestLoadState_EmptyJSON(t *testing.T) {
-	dir := setStateDir(t)
+	dir := SetStateDir(t)
 
 	stateDir := filepath.Join(dir, appDirName)
 	require.NoError(t, os.MkdirAll(stateDir, 0755))
@@ -81,7 +81,7 @@ func TestLoadState_EmptyJSON(t *testing.T) {
 }
 
 func TestSaveState_CreatesDirectory(t *testing.T) {
-	dir := setStateDir(t)
+	dir := SetStateDir(t)
 
 	err := SaveState(&State{LastSelectedChannelID: "test"})
 	require.NoError(t, err)
@@ -141,7 +141,7 @@ func TestToggleFavorite_AddAndRemove(t *testing.T) {
 }
 
 func TestSaveAndLoadState_WithFavorites(t *testing.T) {
-	setStateDir(t)
+	SetStateDir(t)
 
 	original := &State{
 		LastSelectedChannelID: "groovesalad",
@@ -157,7 +157,7 @@ func TestSaveAndLoadState_WithFavorites(t *testing.T) {
 }
 
 func TestLoadState_BackwardCompatibility(t *testing.T) {
-	dir := setStateDir(t)
+	dir := SetStateDir(t)
 
 	// Write state JSON without favorites field (simulates old version)
 	stateDir := filepath.Join(dir, appDirName)

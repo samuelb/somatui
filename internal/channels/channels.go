@@ -1,4 +1,4 @@
-package main
+package channels
 
 import (
 	"context"
@@ -42,11 +42,11 @@ const (
 	appCacheDirName = "somatui"
 )
 
-// somafmChannelsURL is a var to allow overriding in tests.
-var somafmChannelsURL = "https://somafm.com/channels.json"
+// SomaFMChannelsURL is the URL for fetching channels - exported for testing.
+var SomaFMChannelsURL = "https://somafm.com/channels.json"
 
-// getCacheFilePath returns the absolute path to the cache file.
-func getCacheFilePath() (string, error) {
+// GetCacheFilePath returns the absolute path to the cache file.
+func GetCacheFilePath() (string, error) {
 	cacheDir, err := os.UserCacheDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to get user cache directory: %w", err)
@@ -58,9 +58,9 @@ func getCacheFilePath() (string, error) {
 	return filepath.Join(appCacheDir, cacheFileName), nil
 }
 
-// readChannelsFromCache attempts to read channel data from the local cache file.
-func readChannelsFromCache() (*Channels, error) {
-	cachePath, err := getCacheFilePath()
+// ReadChannelsFromCache attempts to read channel data from the local cache file.
+func ReadChannelsFromCache() (*Channels, error) {
+	cachePath, err := GetCacheFilePath()
 	if err != nil {
 		return nil, err
 	}
@@ -78,9 +78,9 @@ func readChannelsFromCache() (*Channels, error) {
 	return &channels, nil
 }
 
-// writeChannelsToCache writes the given channel data to the local cache file.
-func writeChannelsToCache(channels *Channels) error {
-	cachePath, err := getCacheFilePath()
+// WriteChannelsToCache writes the given channel data to the local cache file.
+func WriteChannelsToCache(channels *Channels) error {
+	cachePath, err := GetCacheFilePath()
 	if err != nil {
 		return err
 	}
@@ -97,18 +97,18 @@ func writeChannelsToCache(channels *Channels) error {
 	return nil
 }
 
-// fetchChannelsFromNetwork fetches channel data from the SomaFM API.
-func fetchChannelsFromNetwork() (*Channels, error) {
+// FetchChannelsFromNetwork fetches channel data from the SomaFM API.
+func FetchChannelsFromNetwork(userAgent string) (*Channels, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	client := &http.Client{}
-	req, err := http.NewRequestWithContext(ctx, "GET", somafmChannelsURL, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", SomaFMChannelsURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Set("User-Agent", userAgent())
+	req.Header.Set("User-Agent", userAgent)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -126,7 +126,7 @@ func fetchChannelsFromNetwork() (*Channels, error) {
 	}
 
 	// Write to cache for future use
-	if err := writeChannelsToCache(&fetchedChannels); err != nil {
+	if err := WriteChannelsToCache(&fetchedChannels); err != nil {
 		// Log error but don't fail
 		fmt.Fprintf(os.Stderr, "Warning: Failed to write channels to cache: %v\n", err)
 	}

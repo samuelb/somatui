@@ -1,4 +1,4 @@
-package main
+package state
 
 import (
 	"encoding/json"
@@ -65,8 +65,8 @@ func getStateDir() (string, error) {
 	return filepath.Join(baseDir, appDirName), nil
 }
 
-// getStateFilePath returns the absolute path to the state file.
-func getStateFilePath() (string, error) {
+// GetStateFilePath returns the absolute path to the state file.
+func GetStateFilePath() (string, error) {
 	stateDir, err := getStateDir()
 	if err != nil {
 		return "", err
@@ -80,7 +80,7 @@ func getStateFilePath() (string, error) {
 // LoadState reads the application state from the state file.
 // If the file does not exist, it returns a default empty State.
 func LoadState() (*State, error) {
-	statePath, err := getStateFilePath()
+	statePath, err := GetStateFilePath()
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +103,7 @@ func LoadState() (*State, error) {
 
 // SaveState writes the given application state to the state file.
 func SaveState(state *State) error {
-	statePath, err := getStateFilePath()
+	statePath, err := GetStateFilePath()
 	if err != nil {
 		return err
 	}

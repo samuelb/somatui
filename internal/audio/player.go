@@ -1,4 +1,4 @@
-package main
+package audio
 
 import (
 	"fmt"
@@ -16,28 +16,24 @@ const (
 	fadeSteps       = 20
 )
 
-// userAgent returns the User-Agent string using the software name and version.
-func userAgent() string {
-	return "SomaTUI/" + version
-}
-
-// AudioPlayer is the interface for audio playback operations.
+// Player is the interface for audio playback operations.
 // This allows mocking the player in tests.
-type AudioPlayer interface {
+type Player interface {
 	Play(url string) error
 	Stop()
 }
 
-// Player manages the audio playback for SomaFM streams.
-type Player struct {
+// AudioPlayer manages the audio playback for SomaFM streams.
+type AudioPlayer struct {
 	ctx        *oto.Context
 	player     *oto.Player
 	stream     io.Closer
 	cancelFade chan struct{}
+	userAgent  string
 }
 
 // NewPlayer initializes a new audio player with a default sample rate and channel count.
-func NewPlayer() (*Player, error) {
+func NewPlayer(userAgent string) (*AudioPlayer, error) {
 	// Initialize oto context with standard audio parameters
 	op := &oto.NewContextOptions{
 		SampleRate:   44100,
@@ -51,19 +47,17 @@ func NewPlayer() (*Player, error) {
 	// Wait for the audio context to be ready
 	<-ready
 
-	return &Player{ctx: ctx}, nil
+	return &AudioPlayer{ctx: ctx, userAgent: userAgent}, nil
 }
 
 // Play starts streaming and playing audio from the given URL.
 // It closes any previously playing stream before starting a new one.
-func (p *Player) Play(url string) error {
+func (p *AudioPlayer) Play(url string) error {
 	// Cancel any ongoing fade-in and fade out current playback
 	if p.cancelFade != nil {
 		close(p.cancelFade)
 	}
 	p.fadeOut()
-	p.cancelFade = make(chan struct{})
-
 	p.cleanup()
 
 	// Create a pipe to connect the HTTP stream to the MP3 decoder
@@ -78,7 +72,7 @@ func (p *Player) Play(url string) error {
 			pw.CloseWithError(fmt.Errorf("failed to create request: %w", err))
 			return
 		}
-		req.Header.Set("User-Agent", userAgent())
+		req.Header.Set("User-Agent", p.userAgent)
 
 		client := &http.Client{}
 		resp, err := client.Do(req)
@@ -122,7 +116,7 @@ func (p *Player) Play(url string) error {
 }
 
 // fadeIn gradually increases the volume from 0 to 1.
-func (p *Player) fadeIn() {
+func (p *AudioPlayer) fadeIn() {
 	stepDuration := fadeInDuration / fadeSteps
 	for i := 1; i <= fadeSteps; i++ {
 		select {
@@ -137,7 +131,7 @@ func (p *Player) fadeIn() {
 }
 
 // fadeOut gradually decreases the volume from current to 0.
-func (p *Player) fadeOut() {
+func (p *AudioPlayer) fadeOut() {
 	if p.player == nil {
 		return
 	}
@@ -152,7 +146,7 @@ func (p *Player) fadeOut() {
 }
 
 // Stop halts the current audio playback and closes the associated stream.
-func (p *Player) Stop() {
+func (p *AudioPlayer) Stop() {
 	// Cancel any ongoing fade-in and fade out
 	if p.cancelFade != nil {
 		close(p.cancelFade)
@@ -163,7 +157,7 @@ func (p *Player) Stop() {
 }
 
 // cleanup releases player and stream resources.
-func (p *Player) cleanup() {
+func (p *AudioPlayer) cleanup() {
 	if p.player != nil {
 		p.player = nil
 	}
