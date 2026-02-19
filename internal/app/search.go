@@ -4,10 +4,7 @@ import (
 	"strings"
 	"unicode"
 
-	"somatui/internal/state"
 	"somatui/internal/ui"
-
-	"github.com/charmbracelet/bubbles/list"
 )
 
 // IsValidSearchChar returns true if the character is safe for search input.
@@ -82,16 +79,4 @@ func (m *Model) IsMatch(idx int) bool {
 		}
 	}
 	return false
-}
-
-// SortItemsWithFavorites returns items sorted with favorites first,
-// preserving relative order within each group.
-func SortItemsWithFavorites(items []list.Item, state *state.State) []list.Item {
-	if state == nil {
-		return items
-	}
-	sorted := make([]list.Item, len(items))
-	copy(sorted, items)
-	// Sort implementation would go here
-	return sorted
 }
