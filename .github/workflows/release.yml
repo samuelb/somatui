@@ -73,7 +73,7 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: |
-          go build -ldflags "-s -w -X main.version=${{ inputs.version }} -X main.commit=${GITHUB_SHA::7} -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o somatui_${{ matrix.goos }}_${{ matrix.goarch }}
+          go build -ldflags "-s -w -X main.version=${{ inputs.version }} -X main.commit=${GITHUB_SHA::7} -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o somatui_${{ matrix.goos }}_${{ matrix.goarch }} ./cmd/somatui
 
       - uses: actions/upload-artifact@v6
         with:
