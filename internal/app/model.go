@@ -5,6 +5,7 @@ import (
 	"somatui/internal/channels"
 	"somatui/internal/platform"
 	"somatui/internal/state"
+	"somatui/internal/ui"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -71,23 +72,9 @@ func (m *Model) GetPlayingChannel(items []list.Item) *channels.Channel {
 		return nil
 	}
 	for _, listItem := range items {
-		if i, ok := listItem.(Item); ok && i.Channel.ID == m.PlayingID {
+		if i, ok := listItem.(ui.Item); ok && i.Channel.ID == m.PlayingID {
 			return &i.Channel
 		}
 	}
 	return nil
 }
-
-// Item wraps a channels.Channel for use with the list component.
-type Item struct {
-	Channel channels.Channel
-}
-
-// FilterValue returns the title for filtering.
-func (i Item) FilterValue() string { return i.Channel.Title }
-
-// Title returns the channel title.
-func (i Item) Title() string { return i.Channel.Title }
-
-// Description returns the channel description.
-func (i Item) Description() string { return i.Channel.Description }
