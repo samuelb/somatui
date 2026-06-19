@@ -1,6 +1,9 @@
 package app
 
 import (
+	"fmt"
+	"os"
+
 	"somatui/internal/audio"
 	"somatui/internal/platform"
 	"somatui/internal/state"
@@ -250,35 +253,40 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // playChannel starts playing the given channel.
 func (m *Model) playChannel(i ui.Item) tea.Cmd {
-	m.PlayingID = i.Channel.ID
 	m.StreamErr = ""
 
-	// Save the last selected channel
 	if m.State != nil {
 		m.State.LastSelectedChannelID = i.Channel.ID
-		_ = state.SaveState(m.State) // Ignore error - continue anyway
+		if err := state.SaveState(m.State); err != nil {
+			fmt.Fprintf(os.Stderr, "Error saving state: %v\n", err)
+		}
 	}
 
 	playlistURL := SelectMP3PlaylistURL(i.Channel.Playlists)
 	if playlistURL == "" {
-		return nil
+		return func() tea.Msg {
+			return StreamErrorMsg{Err: fmt.Errorf("no MP3 playlist available for %s", i.Channel.Title)}
+		}
 	}
 
 	streamURL, err := playlist.GetStreamURLFromPlaylist(playlistURL, m.UserAgent)
 	if err != nil {
-		return nil
+		return func() tea.Msg {
+			return StreamErrorMsg{Err: fmt.Errorf("failed to get stream URL: %w", err)}
+		}
 	}
 
 	if err := m.Player.Play(streamURL); err != nil {
-		return nil
+		return func() tea.Msg {
+			return StreamErrorMsg{Err: fmt.Errorf("failed to start playback: %w", err)}
+		}
 	}
 
+	m.PlayingID = i.Channel.ID
 	m.StopMetadataReader()
 	m.MetadataReader = audio.NewMetadataReader(streamURL)
 	m.MetadataReader.Start(m.UserAgent)
 	m.TrackInfo = nil
-
-	// Update MPRIS
 	m.UpdateMPRIS(m.List.Items())
 
 	return m.PollTrackUpdates()
