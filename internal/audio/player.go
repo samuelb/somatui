@@ -2,6 +2,7 @@ package audio
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -20,6 +21,10 @@ const (
 	fadeOutDuration = 250 * time.Millisecond
 	fadeSteps       = 20
 )
+
+// ErrSuperseded is returned by Play when a newer Play or Stop request arrived
+// while this one was still connecting; the newer request owns the audio state.
+var ErrSuperseded = errors.New("playback superseded by a newer request")
 
 // Player is the interface for audio playback operations.
 // This allows mocking the player in tests.
@@ -54,6 +59,7 @@ type AudioPlayer struct {
 
 	mu      sync.Mutex
 	current *session // the active session, guarded by mu
+	playGen uint64   // bumped by every Play/Stop so stale connects never commit
 }
 
 // NewPlayer initializes a new audio player with a default sample rate and channel count.
@@ -74,13 +80,27 @@ func NewPlayer(userAgent string) (*AudioPlayer, error) {
 	return &AudioPlayer{ctx: ctx, userAgent: userAgent, errChan: make(chan error, 2)}, nil
 }
 
-// Play starts streaming and playing audio from the given URL. It returns once
+// Play starts streaming and playing audio from the given URL. It blocks until
 // the stream is decoding and playback has begun; the previous session (if any)
-// fades out and tears down asynchronously, so this never blocks the caller.
+// fades out and tears down asynchronously. Play is safe to call concurrently:
+// if another Play or Stop arrives while this one is still connecting, the
+// newer request wins and this one returns ErrSuperseded without touching the
+// audio state.
 func (p *AudioPlayer) Play(url string) error {
+	p.mu.Lock()
+	p.playGen++
+	gen := p.playGen
+	p.mu.Unlock()
+
 	// Create a pipe to connect the HTTP stream to the MP3 decoder.
 	pr, pw := io.Pipe()
 	ctx, cancel := context.WithCancel(context.Background())
+
+	discard := func() {
+		cancel()
+		_ = pr.Close()
+		_ = pw.Close()
+	}
 
 	go p.fetchStream(ctx, url, pw)
 
@@ -88,9 +108,7 @@ func (p *AudioPlayer) Play(url string) error {
 	// failure mode, so the new session is not committed until decoding succeeds.
 	decoder, err := mp3.NewDecoder(pr)
 	if err != nil {
-		cancel()
-		_ = pr.Close()
-		_ = pw.Close()
+		discard()
 		return fmt.Errorf("failed to decode mp3: %w", err)
 	}
 
@@ -98,6 +116,16 @@ func (p *AudioPlayer) Play(url string) error {
 	var decodedStream io.Reader = decoder
 	if decoder.SampleRate() != sampleRate {
 		decodedStream = newResampler(decoder, decoder.SampleRate(), sampleRate)
+	}
+
+	// Commit the new session and stop the old one (which fades out on its own
+	// goroutine, briefly crossfading with the new stream for gapless switching).
+	// If a newer Play/Stop arrived while we were connecting, back out instead.
+	p.mu.Lock()
+	if gen != p.playGen {
+		p.mu.Unlock()
+		discard()
+		return ErrSuperseded
 	}
 
 	player := p.ctx.NewPlayer(decodedStream)
@@ -110,10 +138,6 @@ func (p *AudioPlayer) Play(url string) error {
 		cancel: cancel,
 		stop:   make(chan struct{}),
 	}
-
-	// Swap in the new session and stop the old one (which fades out on its own
-	// goroutine, briefly crossfading with the new stream for gapless switching).
-	p.mu.Lock()
 	old := p.current
 	p.current = s
 	p.mu.Unlock()
@@ -210,10 +234,12 @@ func (p *AudioPlayer) fadeOutAndClose(s *session) {
 	s.cancel()
 }
 
-// Stop halts the current audio playback. The fade-out and teardown run
-// asynchronously, so this returns immediately.
+// Stop halts the current audio playback and cancels any Play call that is
+// still connecting. The fade-out and teardown run asynchronously, so this
+// returns immediately.
 func (p *AudioPlayer) Stop() {
 	p.mu.Lock()
+	p.playGen++
 	old := p.current
 	p.current = nil
 	p.mu.Unlock()

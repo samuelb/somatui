@@ -23,6 +23,7 @@ type Model struct {
 	List           list.Model
 	Player         audio.Player
 	PlayingID      string // ID of the playing channel, empty if not playing
+	ConnectingID   string // ID of the channel currently connecting, empty if none
 	Loading        bool
 	Err            error
 	State          *state.State
@@ -57,13 +58,14 @@ func (m *Model) StopMetadataReader() {
 	}
 }
 
-// stopPlayback stops the player and clears all playback-related state,
-// then reflects the stopped state to MPRIS.
+// stopPlayback stops the player (cancelling any in-flight connect) and clears
+// all playback-related state, then reflects the stopped state to MPRIS.
 func (m *Model) stopPlayback() {
 	if m.Player != nil {
 		m.Player.Stop()
 	}
 	m.PlayingID = ""
+	m.ConnectingID = ""
 	m.StopMetadataReader()
 	m.TrackInfo = nil
 	m.StreamErr = ""

@@ -39,9 +39,19 @@ type TrackUpdateMsg struct {
 // TrackPollTickMsg is a message sent when it's time to poll for track updates.
 type TrackPollTickMsg struct{}
 
-// StreamErrorMsg is a message sent when a stream error occurs.
+// StreamErrorMsg is a message sent when a stream error occurs. ChannelID is
+// set when the error belongs to a specific play request (so stale requests can
+// be ignored) and empty for runtime errors on the active stream.
 type StreamErrorMsg struct {
-	Err error
+	Err       error
+	ChannelID string
+}
+
+// PlaybackStartedMsg is sent when a play request has connected and audio is
+// running. It carries the resolved stream URL for the metadata reader.
+type PlaybackStartedMsg struct {
+	ChannelID string
+	StreamURL string
 }
 
 // ChannelRefreshTickMsg is a message sent when it's time to refresh channels.

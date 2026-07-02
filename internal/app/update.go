@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"unicode/utf8"
@@ -157,7 +158,25 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.PollTrackUpdates()
 	case TrackPollTickMsg:
 		return m, m.PollTrackUpdates()
+	case PlaybackStartedMsg:
+		if msg.ChannelID != m.ConnectingID {
+			// Stale result: a newer play/stop request superseded this one.
+			return m, nil
+		}
+		m.ConnectingID = ""
+		m.PlayingID = msg.ChannelID
+		m.StopMetadataReader()
+		m.MetadataReader = audio.NewMetadataReader(msg.StreamURL)
+		m.MetadataReader.Start(m.UserAgent)
+		m.TrackInfo = nil
+		m.UpdateMPRIS(items)
+		return m, m.PollTrackUpdates()
 	case StreamErrorMsg:
+		// Ignore errors from play requests that have been superseded; only the
+		// active connect attempt (or the running stream, ChannelID == "") counts.
+		if msg.ChannelID != "" && msg.ChannelID != m.ConnectingID {
+			return m, nil
+		}
 		// Stop the player so the failed session's goroutine and audio
 		// resources are released instead of lingering until the next play.
 		m.stopPlayback()
@@ -166,8 +185,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// MPRIS control messages
 	case platform.MPRISPlayMsg:
-		// Play the currently selected channel
-		if m.PlayingID == "" {
+		// Play the currently selected channel unless already playing/connecting
+		if m.PlayingID == "" && m.ConnectingID == "" {
 			if i, ok := m.List.SelectedItem().(ui.Item); ok {
 				return m, m.playChannel(i)
 			}
@@ -177,8 +196,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.stopPlayback()
 		}
 	case platform.MPRISPlayPauseMsg:
-		// Toggle: if playing, stop; if stopped, play
-		if m.PlayingID != "" {
+		// Toggle: if playing or connecting, stop; if stopped, play
+		if m.PlayingID != "" || m.ConnectingID != "" {
 			m.stopPlayback()
 		} else {
 			if i, ok := m.List.SelectedItem().(ui.Item); ok {
@@ -218,7 +237,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// playChannel starts playing the given channel.
+// playChannel starts connecting to the given channel. The playlist fetch and
+// stream connect run in the returned command so the UI stays responsive; the
+// result arrives as PlaybackStartedMsg or StreamErrorMsg.
 func (m *Model) playChannel(i ui.Item) tea.Cmd {
 	m.StreamErr = ""
 
@@ -229,34 +250,34 @@ func (m *Model) playChannel(i ui.Item) tea.Cmd {
 		}
 	}
 
+	channelID := i.Channel.ID
+	m.ConnectingID = channelID
 	playlistURL := SelectMP3PlaylistURL(i.Channel.Playlists)
 	if playlistURL == "" {
 		return func() tea.Msg {
-			return StreamErrorMsg{Err: fmt.Errorf("no MP3 playlist available for %s", i.Channel.Title)}
+			return StreamErrorMsg{
+				Err:       fmt.Errorf("no MP3 playlist available for %s", i.Channel.Title),
+				ChannelID: channelID,
+			}
 		}
 	}
 
-	streamURL, err := playlist.GetStreamURLFromPlaylist(playlistURL, m.UserAgent)
-	if err != nil {
-		return func() tea.Msg {
-			return StreamErrorMsg{Err: fmt.Errorf("failed to get stream URL: %w", err)}
+	player := m.Player
+	userAgent := m.UserAgent
+	return func() tea.Msg {
+		streamURL, err := playlist.GetStreamURLFromPlaylist(playlistURL, userAgent)
+		if err != nil {
+			return StreamErrorMsg{Err: fmt.Errorf("failed to get stream URL: %w", err), ChannelID: channelID}
 		}
-	}
-
-	if err := m.Player.Play(streamURL); err != nil {
-		return func() tea.Msg {
-			return StreamErrorMsg{Err: fmt.Errorf("failed to start playback: %w", err)}
+		if err := player.Play(streamURL); err != nil {
+			if errors.Is(err, audio.ErrSuperseded) {
+				// A newer play/stop request won; its own messages drive the UI.
+				return nil
+			}
+			return StreamErrorMsg{Err: fmt.Errorf("failed to start playback: %w", err), ChannelID: channelID}
 		}
+		return PlaybackStartedMsg{ChannelID: channelID, StreamURL: streamURL}
 	}
-
-	m.PlayingID = i.Channel.ID
-	m.StopMetadataReader()
-	m.MetadataReader = audio.NewMetadataReader(streamURL)
-	m.MetadataReader.Start(m.UserAgent)
-	m.TrackInfo = nil
-	m.UpdateMPRIS(m.List.Items())
-
-	return m.PollTrackUpdates()
 }
 
 // NewHelpKeys returns additional help keys for the list.

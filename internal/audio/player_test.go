@@ -82,6 +82,52 @@ func drainPipe(r io.Reader) ([]byte, error) {
 	return io.ReadAll(r)
 }
 
+// silentMP3Frames returns n silent MPEG-1 Layer III frames (44.1 kHz, 128 kbps,
+// stereo): a sync header followed by all-zero side info and main data.
+func silentMP3Frames(n int) []byte {
+	const frameSize = 417 // 144 * 128000 / 44100
+	frame := make([]byte, frameSize)
+	frame[0], frame[1], frame[2], frame[3] = 0xFF, 0xFB, 0x90, 0x64
+	buf := make([]byte, 0, n*frameSize)
+	for i := 0; i < n; i++ {
+		buf = append(buf, frame...)
+	}
+	return buf
+}
+
+func TestPlay_SupersededByStop(t *testing.T) {
+	securitytest.AllowTestHosts(t)
+
+	// Hold the stream response until the test has issued Stop, so the Play
+	// call is still connecting when it is superseded.
+	requestArrived := make(chan struct{})
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(requestArrived)
+		w.WriteHeader(http.StatusOK)
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		<-release
+		_, _ = w.Write(silentMP3Frames(30))
+	}))
+	defer server.Close()
+
+	// No oto context: the superseded path must return before touching it.
+	p := newTestPlayer()
+
+	playErr := make(chan error, 1)
+	go func() { playErr <- p.Play(server.URL) }()
+
+	<-requestArrived
+	p.Stop() // supersedes the in-flight Play
+	close(release)
+
+	err := <-playErr
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrSuperseded)
+}
+
 func TestFetchStream_Success(t *testing.T) {
 	securitytest.AllowTestHosts(t)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

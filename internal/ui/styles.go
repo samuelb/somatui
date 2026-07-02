@@ -30,6 +30,10 @@ var (
 	StatusStoppedStyle = lipgloss.NewStyle().
 				Foreground(SubtleColor)
 
+	StatusConnectingStyle = lipgloss.NewStyle().
+				Foreground(PrimaryColor).
+				Bold(true)
+
 	TrackInfoStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#CCCCCC")).
 			Italic(true)

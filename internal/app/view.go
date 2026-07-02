@@ -51,12 +51,17 @@ func (m *Model) RenderStatusBar(items []list.Item) string {
 	var icon, stateText string
 	var stateStyle lipgloss.Style
 
-	// Determine state and styling
-	if m.PlayingID == "" {
+	// Determine state and styling; an in-flight connect wins over stopped.
+	switch {
+	case m.ConnectingID != "":
+		icon = "◌"
+		stateText = "Connecting"
+		stateStyle = ui.StatusConnectingStyle
+	case m.PlayingID == "":
 		icon = "■"
 		stateText = "Stopped"
 		stateStyle = ui.StatusStoppedStyle
-	} else {
+	default:
 		icon = "▶"
 		stateText = "Playing"
 		stateStyle = ui.StatusPlayingStyle
@@ -65,10 +70,14 @@ func (m *Model) RenderStatusBar(items []list.Item) string {
 	// Build the status line
 	parts := []string{stateStyle.Render(icon + " " + stateText)}
 
-	// Add channel name if playing
-	if m.PlayingID != "" {
+	// Add the channel name if playing or connecting
+	activeID := m.PlayingID
+	if m.ConnectingID != "" {
+		activeID = m.ConnectingID
+	}
+	if activeID != "" {
 		for _, listItem := range items {
-			if i, ok := listItem.(ui.Item); ok && i.Channel.ID == m.PlayingID {
+			if i, ok := listItem.(ui.Item); ok && i.Channel.ID == activeID {
 				channelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF"))
 				parts = append(parts, channelStyle.Render(i.Channel.Title))
 				break

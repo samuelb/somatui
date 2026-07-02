@@ -541,7 +541,59 @@ func TestPlayChannel_Success(t *testing.T) {
 
 	cmd := m.playChannel(item)
 
-	// On success PlayingID is set and PollTrackUpdates is returned
+	// The connect runs asynchronously: the model only records the attempt.
+	assert.Equal(t, "testchan", m.ConnectingID)
+	assert.Empty(t, m.PlayingID)
+	require.NotNil(t, cmd)
+
+	// Executing the command performs the playlist fetch and starts the player.
+	msg := cmd()
+	started, ok := msg.(PlaybackStartedMsg)
+	require.True(t, ok, "expected PlaybackStartedMsg, got %T", msg)
+	assert.Equal(t, "testchan", started.ChannelID)
+	assert.Equal(t, streamURL+"/stream", started.StreamURL)
+
+	// Feeding the message back completes the transition to playing.
+	m.Update(started)
 	assert.Equal(t, "testchan", m.PlayingID)
-	assert.NotNil(t, cmd)
+	assert.Empty(t, m.ConnectingID)
+
+	// Stop the metadata reader started by the handler before the server closes.
+	m.StopMetadataReader()
+	m.Player.Stop()
+}
+
+func TestUpdate_PlaybackStartedMsg_StaleIsIgnored(t *testing.T) {
+	m := newTestModel(t)
+	m.ConnectingID = "dronezone" // a newer request is in flight
+
+	_, cmd := m.Update(PlaybackStartedMsg{ChannelID: "groovesalad", StreamURL: "http://somafm.com/old"})
+
+	assert.Empty(t, m.PlayingID, "stale playback start must not become the playing channel")
+	assert.Equal(t, "dronezone", m.ConnectingID)
+	assert.Nil(t, m.MetadataReader)
+	assert.Nil(t, cmd)
+}
+
+func TestUpdate_StreamErrorMsg_StaleChannelIgnored(t *testing.T) {
+	m := newTestModel(t)
+	mp := m.Player.(*mockPlayer)
+	mp.playing = true
+	m.PlayingID = "groovesalad"
+
+	// An error from a superseded play request must not stop current playback.
+	m.Update(StreamErrorMsg{Err: errors.New("old request failed"), ChannelID: "dronezone"})
+
+	assert.Equal(t, "groovesalad", m.PlayingID)
+	assert.True(t, mp.playing)
+	assert.Empty(t, m.StreamErr)
+}
+
+func TestUpdate_StopKey_CancelsConnecting(t *testing.T) {
+	m := newTestModel(t)
+	m.ConnectingID = "groovesalad"
+
+	sendKey(m, 's')
+
+	assert.Empty(t, m.ConnectingID)
 }

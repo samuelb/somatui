@@ -67,6 +67,17 @@ func TestRenderStatusBar_Stopped(t *testing.T) {
 	assert.Contains(t, result, "■")
 }
 
+func TestRenderStatusBar_Connecting(t *testing.T) {
+	m := newTestModel(t)
+	m.ConnectingID = "groovesalad"
+
+	result := m.RenderStatusBar(m.List.Items())
+
+	assert.Contains(t, result, "Connecting")
+	assert.Contains(t, result, "◌")
+	assert.Contains(t, result, "Groove Salad")
+}
+
 func TestRenderStatusBar_Playing(t *testing.T) {
 	m := newTestModel(t)
 	m.PlayingID = "groovesalad"
