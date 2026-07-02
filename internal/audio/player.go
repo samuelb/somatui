@@ -11,7 +11,7 @@ import (
 	"somatui/internal/security"
 
 	"github.com/ebitengine/oto/v3"
-	"github.com/hajimehoshi/ebiten/v2/audio/mp3"
+	mp3 "github.com/hajimehoshi/go-mp3"
 )
 
 const (
@@ -86,12 +86,18 @@ func (p *AudioPlayer) Play(url string) error {
 
 	// Decode the MP3 stream from the pipe reader. This is the only synchronous
 	// failure mode, so the new session is not committed until decoding succeeds.
-	decodedStream, err := mp3.DecodeWithSampleRate(sampleRate, pr)
+	decoder, err := mp3.NewDecoder(pr)
 	if err != nil {
 		cancel()
 		_ = pr.Close()
 		_ = pw.Close()
 		return fmt.Errorf("failed to decode mp3: %w", err)
+	}
+
+	// The oto context runs at a fixed rate; resample if the stream differs.
+	var decodedStream io.Reader = decoder
+	if decoder.SampleRate() != sampleRate {
+		decodedStream = newResampler(decoder, decoder.SampleRate(), sampleRate)
 	}
 
 	player := p.ctx.NewPlayer(decodedStream)
