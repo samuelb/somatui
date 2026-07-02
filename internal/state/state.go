@@ -7,8 +7,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
-
-	"somatui/internal/security"
 )
 
 // State holds application state that persists between sessions.
@@ -86,11 +84,7 @@ func LoadState() (*State, error) {
 		return nil, err
 	}
 
-	if err := security.ValidatePathNoTraversal(statePath); err != nil {
-		return nil, fmt.Errorf("invalid state path: %w", err)
-	}
-
-	data, err := os.ReadFile(statePath) // #nosec G304 -- path validated by ValidatePathNoTraversal()
+	data, err := os.ReadFile(statePath) // #nosec G304 -- path derived from os.UserHomeDir, not user input
 	if err != nil {
 		if os.IsNotExist(err) {
 			return &State{}, nil

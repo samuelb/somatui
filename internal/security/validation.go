@@ -60,13 +60,6 @@ func isExtraAllowedHost(host string) bool {
 	return false
 }
 
-func ValidatePathNoTraversal(path string) error {
-	if strings.Contains(path, "..") {
-		return fmt.Errorf("path contains traversal sequence")
-	}
-	return nil
-}
-
 // NewRequest creates a validated HTTP GET request with the given context, URL, and
 // User-Agent. Returns an error if the URL fails host validation or request creation fails.
 // Callers may add additional headers to the returned request before use.

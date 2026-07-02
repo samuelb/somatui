@@ -59,7 +59,7 @@ func GetCacheFilePath() (string, error) {
 		}
 	}
 	appCacheDir := filepath.Join(cacheDir, appCacheDirName)
-	if err := os.MkdirAll(appCacheDir, 0750); err != nil { // #nosec G703 -- path validated by ValidatePathNoTraversal()
+	if err := os.MkdirAll(appCacheDir, 0750); err != nil { // #nosec G703 -- path derived from os.UserCacheDir, not user input
 		return "", fmt.Errorf("failed to create app cache directory: %w", err)
 	}
 	return filepath.Join(appCacheDir, cacheFileName), nil
@@ -72,11 +72,7 @@ func ReadChannelsFromCache() (*Channels, error) {
 		return nil, err
 	}
 
-	if err := security.ValidatePathNoTraversal(cachePath); err != nil {
-		return nil, fmt.Errorf("invalid cache path: %w", err)
-	}
-
-	data, err := os.ReadFile(cachePath) // #nosec G304 -- path validated by ValidatePathNoTraversal()
+	data, err := os.ReadFile(cachePath) // #nosec G304 -- path derived from os.UserCacheDir, not user input
 	if err != nil {
 		return nil, fmt.Errorf("failed to read cache file: %w", err)
 	}
