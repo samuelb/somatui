@@ -24,11 +24,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.Searching {
 			switch msg.String() {
 			case "ctrl+c":
-				if m.Player != nil {
-					m.Player.Stop()
-				}
-				m.StopMetadataReader()
-				return m, tea.Quit
+				return m, m.quitApp()
 			case "enter":
 				// Exit search mode, keep at current match
 				m.Searching = false
@@ -60,24 +56,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		switch msg.String() {
 		case "ctrl+c", "q":
-			if m.Player != nil {
-				m.Player.Stop()
-			}
-			m.StopMetadataReader()
-			return m, tea.Quit
+			return m, m.quitApp()
 		case "enter", " ":
 			if i, ok := m.List.SelectedItem().(ui.Item); ok {
 				return m, m.playChannel(i)
 			}
 		case "s":
-			if m.Player != nil {
-				m.Player.Stop()
-				m.PlayingID = ""
-				m.StopMetadataReader()
-				m.TrackInfo = nil
-				m.StreamErr = ""
-				m.UpdateMPRIS(items)
-			}
+			m.stopPlayback()
 		case "a":
 			// Toggle the inline about footer.
 			m.ShowAbout = !m.ShowAbout
@@ -136,13 +121,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Loading = false
 
 		// Set the cursor to the last selected channel if available
-		if m.State != nil && m.State.LastSelectedChannelID != "" {
-			for i, li := range newItems {
-				if it, ok := li.(ui.Item); ok && it.Channel.ID == m.State.LastSelectedChannelID {
-					m.List.Select(i)
-					break
-				}
-			}
+		if m.State != nil {
+			m.selectChannelByID(m.State.LastSelectedChannelID)
 		}
 
 		// If loaded from cache, refresh from network in background
@@ -162,14 +142,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		newItems := ChannelsToItems(msg.Channels.Channels)
 		newItems = m.sortItemsWithFavorites(newItems)
 		m.List.SetItems(newItems)
-
-		// Restore selection by channel ID
-		for i, li := range newItems {
-			if it, ok := li.(ui.Item); ok && it.Channel.ID == selectedChannelID {
-				m.List.Select(i)
-				break
-			}
-		}
+		m.selectChannelByID(selectedChannelID)
 	case ChannelRefreshTickMsg:
 		// Time to refresh channels, fetch from network and schedule next tick
 		return m, tea.Batch(func() tea.Msg { return RefreshChannels(m.UserAgent) }, TickChannelRefresh())
@@ -187,14 +160,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case StreamErrorMsg:
 		// Stop the player so the failed session's goroutine and audio
 		// resources are released instead of lingering until the next play.
-		if m.Player != nil {
-			m.Player.Stop()
-		}
-		m.PlayingID = ""
+		m.stopPlayback()
 		m.StreamErr = msg.Err.Error()
-		m.StopMetadataReader()
-		m.TrackInfo = nil
-		m.UpdateMPRIS(items)
 		return m, m.ListenStreamErrors()
 
 	// MPRIS control messages
@@ -206,23 +173,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case platform.MPRISStopMsg:
-		if m.Player != nil && m.PlayingID != "" {
-			m.Player.Stop()
-			m.PlayingID = ""
-			m.StopMetadataReader()
-			m.TrackInfo = nil
-			m.StreamErr = ""
-			m.UpdateMPRIS(items)
+		if m.PlayingID != "" {
+			m.stopPlayback()
 		}
 	case platform.MPRISPlayPauseMsg:
 		// Toggle: if playing, stop; if stopped, play
 		if m.PlayingID != "" {
-			m.Player.Stop()
-			m.PlayingID = ""
-			m.StopMetadataReader()
-			m.TrackInfo = nil
-			m.StreamErr = ""
-			m.UpdateMPRIS(items)
+			m.stopPlayback()
 		} else {
 			if i, ok := m.List.SelectedItem().(ui.Item); ok {
 				return m, m.playChannel(i)

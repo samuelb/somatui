@@ -40,17 +40,10 @@ func (m *Model) ToggleFavorite() {
 		fmt.Fprintf(os.Stderr, "Error saving state: %v\n", err)
 	}
 
-	// Re-sort items with favorites on top
+	// Re-sort items with favorites on top, keeping the cursor on the same channel
 	items := m.sortItemsWithFavorites(m.List.Items())
 	m.List.SetItems(items)
-
-	// Restore cursor to the same channel by ID
-	for i, li := range items {
-		if it, ok := li.(ui.Item); ok && it.Channel.ID == selectedID {
-			m.List.Select(i)
-			break
-		}
-	}
+	m.selectChannelByID(selectedID)
 
 	// Update search matches since indices changed
 	if m.SearchQuery != "" {

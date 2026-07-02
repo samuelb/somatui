@@ -57,6 +57,42 @@ func (m *Model) StopMetadataReader() {
 	}
 }
 
+// stopPlayback stops the player and clears all playback-related state,
+// then reflects the stopped state to MPRIS.
+func (m *Model) stopPlayback() {
+	if m.Player != nil {
+		m.Player.Stop()
+	}
+	m.PlayingID = ""
+	m.StopMetadataReader()
+	m.TrackInfo = nil
+	m.StreamErr = ""
+	m.UpdateMPRIS(m.List.Items())
+}
+
+// quitApp stops playback and returns the quit command.
+func (m *Model) quitApp() tea.Cmd {
+	if m.Player != nil {
+		m.Player.Stop()
+	}
+	m.StopMetadataReader()
+	return tea.Quit
+}
+
+// selectChannelByID moves the list cursor to the channel with the given ID,
+// if present. Used to keep the selection stable across list re-sorts.
+func (m *Model) selectChannelByID(id string) {
+	if id == "" {
+		return
+	}
+	for i, li := range m.List.Items() {
+		if it, ok := li.(ui.Item); ok && it.Channel.ID == id {
+			m.List.Select(i)
+			return
+		}
+	}
+}
+
 // mp3QualityRank orders SomaFM playlist quality levels, best first.
 var mp3QualityRank = map[string]int{"highest": 0, "high": 1, "low": 2}
 
