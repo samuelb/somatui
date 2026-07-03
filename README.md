@@ -100,6 +100,7 @@ To check the version:
 | <kbd>↓</kbd> / <kbd>j</kbd>         | Navigate channels down |
 | <kbd>Enter</kbd> / <kbd>Space</kbd> | Play selected channel  |
 | <kbd>s</kbd>                        | Stop playback          |
+| <kbd>+</kbd> / <kbd>-</kbd>         | Volume up / down       |
 | <kbd>f</kbd> / <kbd>*</kbd>         | Toggle favorite        |
 | <kbd>/</kbd>                        | Filter channels        |
 | <kbd>q</kbd> / <kbd>Ctrl+C</kbd>    | Quit                   |
@@ -116,7 +117,7 @@ To check the version:
 - [Lip Gloss](https://github.com/charmbracelet/lipgloss) (styling)
 - [ansi](https://github.com/charmbracelet/x/ansi) (ANSI parsing)
 - [oto/v3](https://github.com/ebitengine/oto) (audio output)
-- [ebiten/v2](https://github.com/hajimehoshi/ebiten/v2) (game engine)
+- [go-mp3](https://github.com/hajimehoshi/go-mp3) (MP3 decoding)
 
 See `go.mod` for the full dependency list.
 
