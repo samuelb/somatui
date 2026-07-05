@@ -54,6 +54,8 @@ func main() {
 		runServer(args[1:])
 	case "play":
 		runPlay(args[1:])
+	case "list":
+		runList()
 	case "next":
 		runPlayRelative(1)
 	case "prev", "previous":
@@ -78,6 +80,7 @@ func printUsage() {
   somatui                        start the TUI (spawns the playback server if needed)
   somatui play [channel]         play a channel by ID or name, or resume the
                                  last played channel (spawns the server if needed)
+  somatui list                   list all channels (favorites first, marked *)
   somatui next                   play the next channel (favorites first, wraps)
   somatui prev                   play the previous channel
   somatui pause                  toggle pause (reconnects the live stream on unpause)

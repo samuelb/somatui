@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"text/tabwriter"
 	"time"
 
 	"somatui/internal/channels"
@@ -131,6 +132,37 @@ func runPlay(args []string) {
 		fail("%v", err)
 	}
 	fmt.Printf("Playing: %s\n", st.ChannelTitle)
+}
+
+// runList prints the channel catalog, favorites first and marked with a
+// star, one channel per line for browsing and scripting.
+func runList() {
+	c := ensureServer()
+	defer func() { _ = c.Close() }()
+
+	payload := waitForCatalog(c)
+	fmt.Print(formatChannelList(payload))
+}
+
+// formatChannelList renders the catalog as one line per channel: a favorite
+// marker, then aligned ID, title, and genre columns. The ID leads so shell
+// pipelines can cut it out easily.
+func formatChannelList(payload protocol.ChannelsPayload) string {
+	fav := make(map[string]bool, len(payload.Favorites))
+	for _, id := range payload.Favorites {
+		fav[id] = true
+	}
+	var b strings.Builder
+	w := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
+	for _, ch := range payload.Channels {
+		marker := " "
+		if fav[ch.ID] {
+			marker = "*"
+		}
+		_, _ = fmt.Fprintf(w, "%s %s\t%s\t%s\n", marker, ch.ID, ch.Title, ch.Genre)
+	}
+	_ = w.Flush()
+	return b.String()
 }
 
 // findChannelByID returns the channel with the exact ID, if present.

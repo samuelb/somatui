@@ -16,7 +16,7 @@ A modern, TUI (Terminal User Interface) client for streaming and exploring SomaF
   can close the TUI and the music keeps playing
 - The server starts automatically when needed and exits on its own once
   playback is stopped and no client is connected
-- Headless CLI commands (`play`, `stop`, `status`, `volume`) for scripting
+- Headless CLI commands (`play`, `list`, `stop`, `status`, `volume`) for scripting
   and keybindings without opening the TUI
 - Mark channels as favorites for quick access
 - Browse and filter the full list of SomaFM radio channels
@@ -102,6 +102,7 @@ background if one isn't running yet.
 | -------------------------- | -------------------------------------------------------- |
 | `somatui`                  | Start the TUI (spawns the playback server if needed)     |
 | `somatui play [channel]`   | Play a channel by ID or name match, or resume the last played channel when omitted |
+| `somatui list`             | List all channels (favorites first, marked with `*`)     |
 | `somatui next` / `somatui prev` | Play the next / previous channel (favorites first, wraps around) |
 | `somatui pause`            | Toggle pause (live radio: unpausing rejoins the live stream) |
 | `somatui stop`             | Stop playback                                            |
