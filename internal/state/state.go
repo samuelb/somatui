@@ -3,10 +3,13 @@ package state
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
+
+	"somatui/internal/atomicfile"
 )
 
 // State holds application state that persists between sessions.
@@ -131,7 +134,15 @@ func LoadState() (*State, error) {
 
 	var state State
 	if err := json.Unmarshal(data, &state); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal state data: %w", err)
+		// A corrupt state file must not brick startup. Move it aside (so the
+		// next save doesn't destroy the evidence) and start fresh.
+		backupPath := statePath + ".corrupt"
+		if renameErr := os.Rename(statePath, backupPath); renameErr != nil {
+			log.Printf("warning: state file is corrupt (%v) and could not be moved aside: %v", err, renameErr)
+		} else {
+			log.Printf("warning: state file is corrupt (%v), moved to %s, starting fresh", err, backupPath)
+		}
+		return &State{}, nil
 	}
 
 	return &state, nil
@@ -149,7 +160,8 @@ func SaveState(state *State) error {
 		return fmt.Errorf("failed to marshal state for saving: %w", err)
 	}
 
-	if err := os.WriteFile(statePath, data, 0600); err != nil {
+	// Atomic write: a crash mid-save must not corrupt the state file.
+	if err := atomicfile.WriteFile(statePath, data, 0600); err != nil {
 		return fmt.Errorf("failed to write state to file: %w", err)
 	}
 

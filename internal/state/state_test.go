@@ -103,13 +103,27 @@ func TestLoadState_CorruptJSON(t *testing.T) {
 
 	// Write corrupt data to the state file
 	stateDir := filepath.Join(dir, appDirName)
-	require.NoError(t, os.MkdirAll(stateDir, 0755))                                                         // #nosec G301 // Test directory
-	require.NoError(t, os.WriteFile(filepath.Join(stateDir, stateFileName), []byte("{invalid json"), 0644)) // #nosec G306 // Test file
+	statePath := filepath.Join(stateDir, stateFileName)
+	require.NoError(t, os.MkdirAll(stateDir, 0755))                            // #nosec G301 // Test directory
+	require.NoError(t, os.WriteFile(statePath, []byte("{invalid json"), 0644)) // #nosec G306 // Test file
 
+	// A corrupt state file must not brick startup: it is moved aside for
+	// inspection and a fresh state is returned.
 	state, err := LoadState()
-	assert.Error(t, err)
-	assert.Nil(t, state)
-	assert.Contains(t, err.Error(), "unmarshal")
+	require.NoError(t, err)
+	require.NotNil(t, state)
+	assert.Empty(t, state.LastSelectedChannelID)
+
+	assert.NoFileExists(t, statePath)
+	backup, err := os.ReadFile(statePath + ".corrupt") // #nosec G304 // Test file path
+	require.NoError(t, err)
+	assert.Equal(t, "{invalid json", string(backup))
+
+	// The next save must succeed and leave a loadable file behind.
+	require.NoError(t, SaveState(&State{LastSelectedChannelID: "groovesalad"}))
+	loaded, err := LoadState()
+	require.NoError(t, err)
+	assert.Equal(t, "groovesalad", loaded.LastSelectedChannelID)
 }
 
 func TestLoadState_EmptyJSON(t *testing.T) {

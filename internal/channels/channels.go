@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"somatui/internal/atomicfile"
 	"somatui/internal/security"
 )
 
@@ -97,7 +98,8 @@ func WriteChannelsToCache(channels *Channels) error {
 		return fmt.Errorf("failed to marshal channels for caching: %w", err)
 	}
 
-	if err := os.WriteFile(cachePath, data, 0600); err != nil {
+	// Atomic write: a crash mid-save must not corrupt the cache file.
+	if err := atomicfile.WriteFile(cachePath, data, 0600); err != nil {
 		return fmt.Errorf("failed to write channels to cache file: %w", err)
 	}
 
