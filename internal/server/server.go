@@ -45,21 +45,21 @@ type Server struct {
 	shutdownOnce sync.Once
 	done         chan struct{} // closed by Shutdown
 
-	mu             sync.Mutex
-	ln             net.Listener
-	conns          map[*conn]struct{}
-	closing        bool
-	catalog        []channels.Channel // favorites-first order
-	catalogErr     string             // load failure while the catalog is empty
-	status         string
-	channelID      string // active channel while not stopped
-	channelTitle   string
-	trackTitle     string
-	streamErr      string
+	mu               sync.Mutex
+	ln               net.Listener
+	conns            map[*conn]struct{}
+	closing          bool
+	catalog          []channels.Channel // favorites-first order
+	catalogErr       string             // load failure while the catalog is empty
+	status           string
+	channelID        string // active channel while not stopped
+	channelTitle     string
+	trackTitle       string
+	streamErr        string
 	reconnectAttempt int
-	playGen        uint64 // bumped by every play/stop; stale async work backs out
-	reconnectTimer *time.Timer
-	idleTimer      *time.Timer
+	playGen          uint64 // bumped by every play/stop; stale async work backs out
+	reconnectTimer   *time.Timer
+	idleTimer        *time.Timer
 }
 
 // New creates a Server and applies the persisted volume to the player.

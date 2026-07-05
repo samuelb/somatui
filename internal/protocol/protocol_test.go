@@ -78,7 +78,7 @@ func TestNewScanner_LargeLine(t *testing.T) {
 	// Larger than the default bufio.Scanner limit (64 KB), smaller than ours.
 	big := strings.Repeat("x", 1<<20)
 	var buf bytes.Buffer
-	require.NoError(t, WriteLine(&buf, Event{Event: EventChannels, Data: json.RawMessage(`"`+big+`"`)}))
+	require.NoError(t, WriteLine(&buf, Event{Event: EventChannels, Data: json.RawMessage(`"` + big + `"`)}))
 
 	sc := NewScanner(&buf)
 	require.True(t, sc.Scan(), "scanner should handle a 1 MiB line")

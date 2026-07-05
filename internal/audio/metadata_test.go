@@ -187,7 +187,7 @@ func TestICYDemuxer_MalformedMetadataSkipped(t *testing.T) {
 func TestICYDemuxer_TruncatedMetadataBlockIsError(t *testing.T) {
 	var buf bytes.Buffer
 	buf.Write(bytes.Repeat([]byte{0x01}, 10))
-	buf.WriteByte(2) // promises 32 metadata bytes...
+	buf.WriteByte(2)                    // promises 32 metadata bytes...
 	buf.WriteString("StreamTitle='cut") // ...but delivers fewer
 
 	d := newICYDemuxer(&buf, 10, nil)
