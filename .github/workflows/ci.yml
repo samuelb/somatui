@@ -27,6 +27,15 @@ jobs:
       - name: Display coverage
         run: go tool cover -func=coverage.out
 
+      - name: Enforce minimum coverage
+        env:
+          THRESHOLD: 60
+        run: |
+          total=$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}' | tr -d '%')
+          echo "Total coverage: ${total}% (minimum: ${THRESHOLD}%)"
+          awk -v total="$total" -v threshold="$THRESHOLD" 'BEGIN { exit (total + 0 < threshold) }' \
+            || { echo "Coverage dropped below ${THRESHOLD}%"; exit 1; }
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
