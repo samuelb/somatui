@@ -18,6 +18,11 @@ const (
 	dialRetryInterval = 100 * time.Millisecond
 	spawnWait         = 15 * time.Second
 	restartWait       = 3 * time.Second
+
+	// maxServerLogSize caps server.log: spawns append to it and it would
+	// otherwise grow forever, so a spawn that finds it above the cap
+	// truncates it first.
+	maxServerLogSize = 1 << 20 // 1 MiB
 )
 
 // spawnServer is a variable so tests can fake the server launch.
@@ -37,7 +42,7 @@ func SpawnServer() error {
 	// client (and the terminal) going away.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if logPath, err := state.GetLogFilePath(); err == nil {
-		if logFile, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600); err == nil { // #nosec G304 -- path derived from state dir
+		if logFile, err := openServerLog(logPath); err == nil {
 			cmd.Stderr = logFile
 			defer func() { _ = logFile.Close() }() // child keeps its own descriptor
 		}
@@ -47,6 +52,16 @@ func SpawnServer() error {
 		return fmt.Errorf("failed to start somatui server: %w", err)
 	}
 	return cmd.Process.Release()
+}
+
+// openServerLog opens the server log for appending, truncating it first
+// once it has outgrown maxServerLogSize.
+func openServerLog(path string) (*os.File, error) {
+	flags := os.O_APPEND | os.O_CREATE | os.O_WRONLY
+	if info, err := os.Stat(path); err == nil && info.Size() > maxServerLogSize {
+		flags |= os.O_TRUNC
+	}
+	return os.OpenFile(path, flags, 0o600) // #nosec G304 -- path derived from state dir
 }
 
 // EnsureServer returns a connected, hello-verified client, spawning the
