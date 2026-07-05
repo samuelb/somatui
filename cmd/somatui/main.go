@@ -81,7 +81,7 @@ func main() {
 }
 
 func printUsage(w io.Writer) {
-	fmt.Fprint(w, `Usage:
+	_, _ = fmt.Fprint(w, `Usage:
   somatui                        start the TUI (spawns the playback server if needed)
   somatui play [channel]         play a channel by ID or name, or resume the
                                  last played channel (spawns the server if needed)
