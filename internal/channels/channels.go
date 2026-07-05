@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -80,6 +81,15 @@ func ReadChannelsFromCache() (*Channels, error) {
 
 	var channels Channels
 	if err := json.Unmarshal(data, &channels); err != nil {
+		// A corrupt cache must not repeatedly fail silently. Move it aside
+		// (so the next save doesn't destroy the evidence) and let the caller
+		// fall back to a network fetch.
+		backupPath := cachePath + ".corrupt"
+		if renameErr := os.Rename(cachePath, backupPath); renameErr != nil {
+			log.Printf("warning: channel cache is corrupt (%v) and could not be moved aside: %v", err, renameErr)
+		} else {
+			log.Printf("warning: channel cache is corrupt (%v), moved to %s", err, backupPath)
+		}
 		return nil, fmt.Errorf("failed to unmarshal cached data: %w", err)
 	}
 

@@ -75,13 +75,21 @@ func TestReadChannelsFromCache_CorruptJSON(t *testing.T) {
 	dir := SetCacheDir(t)
 
 	cacheDir := filepath.Join(dir, appCacheDirName)
-	require.NoError(t, os.MkdirAll(cacheDir, 0755))                                                    // #nosec G301 // Test directory
-	require.NoError(t, os.WriteFile(filepath.Join(cacheDir, cacheFileName), []byte("not json"), 0644)) // #nosec G306 // Test file
+	cachePath := filepath.Join(cacheDir, cacheFileName)
+	require.NoError(t, os.MkdirAll(cacheDir, 0755))                       // #nosec G301 // Test directory
+	require.NoError(t, os.WriteFile(cachePath, []byte("not json"), 0644)) // #nosec G306 // Test file
 
 	channels, err := ReadChannelsFromCache()
 	assert.Error(t, err)
 	assert.Nil(t, channels)
 	assert.Contains(t, err.Error(), "unmarshal")
+
+	// A corrupt cache must not repeatedly fail silently: it is moved aside
+	// for inspection, like a corrupt state.json.
+	assert.NoFileExists(t, cachePath)
+	backup, err := os.ReadFile(cachePath + ".corrupt") // #nosec G304 // Test file path
+	require.NoError(t, err)
+	assert.Equal(t, "not json", string(backup))
 }
 
 func TestFetchChannelsFromNetwork(t *testing.T) {
