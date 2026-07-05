@@ -86,18 +86,26 @@ func (d *icyDemuxer) readMetadataBlock() error {
 // parseICYMetadata parses an ICY metadata string and extracts the title.
 func parseICYMetadata(metaStr string) (TrackInfo, error) {
 	// ICY metadata format: StreamTitle='Title';StreamUrl='';
-	parts := strings.Split(metaStr, ";")
+	// The title itself may contain semicolons, so it is delimited by the
+	// closing "';" sequence rather than a bare ";" — splitting on ";" would
+	// truncate titles like "Artist - A; B".
+	const opener = "StreamTitle='"
+	start := strings.Index(metaStr, opener)
+	if start < 0 {
+		return TrackInfo{}, fmt.Errorf("no StreamTitle found in metadata")
+	}
+	start += len(opener)
 
-	for _, part := range parts {
-		if strings.HasPrefix(part, "StreamTitle='") {
-			title := strings.TrimPrefix(part, "StreamTitle='")
-			title = strings.TrimSuffix(title, "'")
-
-			return TrackInfo{
-				Title: strings.TrimSpace(title),
-			}, nil
-		}
+	title := metaStr[start:]
+	if end := strings.Index(title, "';"); end >= 0 {
+		// Closing "';" found: the title is everything up to it.
+		title = title[:end]
+	} else {
+		// Title is the final field: drop a trailing "'" if present.
+		title = strings.TrimSuffix(title, "'")
 	}
 
-	return TrackInfo{}, fmt.Errorf("no StreamTitle found in metadata")
+	return TrackInfo{
+		Title: strings.TrimSpace(title),
+	}, nil
 }

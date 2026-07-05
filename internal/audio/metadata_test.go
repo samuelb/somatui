@@ -70,6 +70,18 @@ func TestParseICYMetadata(t *testing.T) {
 			want:    "Café del Mar - Música Ambiental",
 			wantErr: false,
 		},
+		{
+			name:    "semicolon inside title with trailing field",
+			input:   "StreamTitle='Sepalcure - Me; Only Us';StreamUrl='';",
+			want:    "Sepalcure - Me; Only Us",
+			wantErr: false,
+		},
+		{
+			name:    "semicolon inside title as final field",
+			input:   "StreamTitle='Artist - A; B';",
+			want:    "Artist - A; B",
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {
