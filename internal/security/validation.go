@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 )
@@ -46,7 +47,7 @@ func ValidateURL(rawURL string) error {
 		return fmt.Errorf("invalid URL scheme: %s (expected http or https)", parsed.Scheme)
 	}
 
-	host := parsed.Hostname()
+	host := strings.ToLower(parsed.Hostname())
 	if !strings.HasSuffix(host, allowedHostSuffix) && host != "somafm.com" && !isExtraAllowedHost(host) {
 		return fmt.Errorf("URL host not allowed: %s (must be somafm.com or subdomain)", host)
 	}
@@ -57,12 +58,7 @@ func ValidateURL(rawURL string) error {
 func isExtraAllowedHost(host string) bool {
 	extraAllowedHostsMu.RLock()
 	defer extraAllowedHostsMu.RUnlock()
-	for _, h := range extraAllowedHosts {
-		if h == host {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(extraAllowedHosts, host)
 }
 
 // NewRequest creates a validated HTTP GET request with the given context, URL, and

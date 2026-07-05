@@ -47,6 +47,11 @@ func TestValidateURL(t *testing.T) {
 			url:     "https://somafm.com.evil.com/stream",
 			wantErr: true,
 		},
+		{
+			name:    "mixed-case somafm subdomain",
+			url:     "https://Ice1.SomaFM.Com/stream",
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {
