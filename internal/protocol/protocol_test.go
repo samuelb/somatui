@@ -3,6 +3,8 @@ package protocol
 import (
 	"bytes"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -107,4 +109,24 @@ func TestSocketPath_FallbackFitsSunPathLimit(t *testing.T) {
 
 func TestLockPath(t *testing.T) {
 	assert.Equal(t, "/x/somatui.sock.lock", LockPath("/x/somatui.sock"))
+}
+
+func TestEnsureSocketDir_CreatesPrivateDirectory(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "runtime")
+	require.NoError(t, EnsureSocketDir(filepath.Join(dir, "somatui.sock")))
+
+	info, err := os.Stat(dir)
+	require.NoError(t, err)
+	assert.True(t, info.IsDir())
+	assert.Equal(t, os.FileMode(0o700), info.Mode().Perm())
+}
+
+func TestEnsureSocketDir_RejectsGroupAccessibleDirectory(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "runtime")
+	require.NoError(t, os.Mkdir(dir, 0o755)) // #nosec G301 -- intentionally permissive for rejection test
+
+	err := EnsureSocketDir(filepath.Join(dir, "somatui.sock"))
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "must not be accessible")
 }
