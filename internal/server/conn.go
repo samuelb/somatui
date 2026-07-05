@@ -10,16 +10,23 @@ import (
 	"somatui/internal/protocol"
 )
 
-// conn is one client connection. Requests are dispatched concurrently;
-// responses and events share a write mutex so lines never interleave. Events
-// are delivered through single-slot latest-wins channels per event type, so
-// a slow client only ever costs itself intermediate snapshots — it can never
-// block the server's broadcast path.
+// maxConcurrentRequests caps how many of one connection's requests are
+// dispatched at once, so a client sending requests faster than they can be
+// handled applies backpressure on its own read loop instead of spawning
+// unbounded goroutines.
+const maxConcurrentRequests = 32
+
+// conn is one client connection. Requests are dispatched concurrently up to
+// maxConcurrentRequests; responses and events share a write mutex so lines
+// never interleave. Events are delivered through single-slot latest-wins
+// channels per event type, so a slow client only ever costs itself
+// intermediate snapshots — it can never block the server's broadcast path.
 type conn struct {
 	s  *Server
 	nc net.Conn
 
 	writeMu sync.Mutex
+	sem     chan struct{}
 
 	stateCh    chan protocol.Event
 	channelsCh chan protocol.Event
@@ -34,6 +41,7 @@ func (s *Server) serveConn(nc net.Conn) {
 	c := &conn{
 		s:          s,
 		nc:         nc,
+		sem:        make(chan struct{}, maxConcurrentRequests),
 		stateCh:    make(chan protocol.Event, 1),
 		channelsCh: make(chan protocol.Event, 1),
 		done:       make(chan struct{}),
@@ -65,7 +73,11 @@ func (s *Server) serveConn(nc net.Conn) {
 			c.respondError(req.ID, fmt.Errorf("hello required before %q", req.Method))
 			return
 		}
-		go c.handleRequest(req)
+		c.sem <- struct{}{}
+		go func() {
+			defer func() { <-c.sem }()
+			c.handleRequest(req)
+		}()
 	}
 }
 
