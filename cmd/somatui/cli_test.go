@@ -64,3 +64,13 @@ func TestFormatChannelList_ScriptFriendlyFields(t *testing.T) {
 func TestFormatChannelList_EmptyCatalog(t *testing.T) {
 	assert.Empty(t, formatChannelList(protocol.ChannelsPayload{}))
 }
+
+func TestFavoriteMessage_ReportsToggleDirection(t *testing.T) {
+	ch := channels.Channel{ID: "dronezone", Title: "Drone Zone"}
+
+	// The server returns the favorites list after the toggle: the channel
+	// being in it means it was just added.
+	assert.Equal(t, "Favorited: Drone Zone", favoriteMessage([]string{"groovesalad", "dronezone"}, ch))
+	assert.Equal(t, "Unfavorited: Drone Zone", favoriteMessage([]string{"groovesalad"}, ch))
+	assert.Equal(t, "Unfavorited: Drone Zone", favoriteMessage(nil, ch))
+}

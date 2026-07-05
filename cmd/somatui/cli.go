@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"text/tabwriter"
@@ -163,6 +164,36 @@ func formatChannelList(payload protocol.ChannelsPayload) string {
 	}
 	_ = w.Flush()
 	return b.String()
+}
+
+// runFavorite toggles a channel's favorite flag, so favorites can be managed
+// without opening the TUI.
+func runFavorite(args []string) {
+	if len(args) != 1 {
+		fail("usage: somatui favorite <channel-id-or-name>")
+	}
+	c := ensureServer()
+	defer func() { _ = c.Close() }()
+
+	payload := waitForCatalog(c)
+	ch, err := resolveChannel(payload.Channels, args[0])
+	if err != nil {
+		fail("%v", err)
+	}
+	favorites, err := c.ToggleFavorite(ch.ID)
+	if err != nil {
+		fail("%v", err)
+	}
+	fmt.Println(favoriteMessage(favorites, ch))
+}
+
+// favoriteMessage reports which way a favorite toggle went, based on the
+// favorites list the server returned.
+func favoriteMessage(favorites []string, ch channels.Channel) string {
+	if slices.Contains(favorites, ch.ID) {
+		return "Favorited: " + ch.Title
+	}
+	return "Unfavorited: " + ch.Title
 }
 
 // findChannelByID returns the channel with the exact ID, if present.
