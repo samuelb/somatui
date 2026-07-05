@@ -8,6 +8,7 @@ import (
 	"somatui/internal/audio"
 	"somatui/internal/channels"
 	"somatui/internal/protocol"
+	"somatui/internal/state"
 	"somatui/pkg/playlist"
 )
 
@@ -67,15 +68,20 @@ func (s *Server) playChannel(channelID string, userInitiated bool) (protocol.Pla
 	s.channelTitle = ch.Title
 	s.trackTitle = ""
 	s.streamErr = ""
+	var stateToSave *state.State
 	if userInitiated {
 		s.reconnectAttempt = 0
 		s.st.LastSelectedChannelID = ch.ID
-		s.saveStateLocked()
+		stateToSave = s.st.Clone()
 	}
 	s.broadcastStateLocked()
 	playlists := ch.Playlists
 	title := ch.Title
 	s.mu.Unlock()
+
+	if stateToSave != nil {
+		saveState(stateToSave)
+	}
 
 	playlistURL := channels.SelectMP3PlaylistURL(playlists)
 	if playlistURL == "" {
@@ -225,15 +231,18 @@ func (s *Server) SetVolume(v float64, mirrorToMPRIS bool) protocol.PlaybackState
 		v = 1
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.player.SetVolume(v)
 	s.st.SetVolume(v)
-	s.saveStateLocked()
+	stateToSave := s.st.Clone()
 	if mirrorToMPRIS && s.mpris != nil {
 		s.mpris.SetVolume(v)
 	}
 	s.broadcastStateLocked()
-	return s.snapshotLocked()
+	snap := s.snapshotLocked()
+	s.mu.Unlock()
+
+	saveState(stateToSave)
+	return snap
 }
 
 // handleTrackUpdate publishes a now-playing title from the stream's ICY

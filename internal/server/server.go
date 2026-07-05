@@ -313,18 +313,21 @@ func (s *Server) channelsPayloadLocked() protocol.ChannelsPayload {
 // catalog, and notifies all clients.
 func (s *Server) ToggleFavorite(channelID string) []string {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.st.ToggleFavorite(channelID)
-	s.saveStateLocked()
+	stateToSave := s.st.Clone()
 	s.catalog = sortChannelsWithFavorites(s.catalog, s.st.FavoriteChannelIDs)
 	s.broadcastChannelsLocked()
 	// Clone: the caller marshals this after the lock is released, but a later
 	// ToggleFavorite mutates the underlying slice in place.
-	return slices.Clone(s.st.FavoriteChannelIDs)
+	favorites := slices.Clone(s.st.FavoriteChannelIDs)
+	s.mu.Unlock()
+
+	saveState(stateToSave)
+	return favorites
 }
 
-func (s *Server) saveStateLocked() {
-	if err := state.SaveState(s.st); err != nil {
+func saveState(st *state.State) {
+	if err := state.SaveState(st); err != nil {
 		log.Printf("error saving state: %v", err)
 	}
 }

@@ -21,6 +21,23 @@ type State struct {
 	Volume *float64 `json:"volume,omitempty"`
 }
 
+// Clone returns an independent copy suitable for saving without holding the
+// caller's lock.
+func (s *State) Clone() *State {
+	if s == nil {
+		return &State{}
+	}
+	clone := &State{
+		LastSelectedChannelID: s.LastSelectedChannelID,
+		FavoriteChannelIDs:    slices.Clone(s.FavoriteChannelIDs),
+	}
+	if s.Volume != nil {
+		v := *s.Volume
+		clone.Volume = &v
+	}
+	return clone
+}
+
 // GetVolume returns the persisted volume clamped to [0, 1], defaulting to
 // full volume when unset.
 func (s *State) GetVolume() float64 {

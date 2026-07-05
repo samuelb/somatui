@@ -75,6 +75,23 @@ func TestSetVolume_ZeroIsDistinctFromUnset(t *testing.T) {
 	assert.Zero(t, s.GetVolume(), "an explicit mute must not fall back to full volume")
 }
 
+func TestClone_IsIndependent(t *testing.T) {
+	original := &State{
+		LastSelectedChannelID: "groovesalad",
+		FavoriteChannelIDs:    []string{"dronezone"},
+	}
+	original.SetVolume(0.4)
+
+	clone := original.Clone()
+	original.LastSelectedChannelID = "secretagent"
+	original.FavoriteChannelIDs[0] = "lush"
+	original.SetVolume(0.9)
+
+	assert.Equal(t, "groovesalad", clone.LastSelectedChannelID)
+	assert.Equal(t, []string{"dronezone"}, clone.FavoriteChannelIDs)
+	assert.InDelta(t, 0.4, clone.GetVolume(), 1e-9)
+}
+
 func TestSaveAndLoadState_WithVolume(t *testing.T) {
 	SetStateDir(t)
 
