@@ -32,6 +32,20 @@ A modern, TUI (Terminal User Interface) client for streaming and exploring SomaF
 
 ## Installation
 
+### Homebrew (macOS and Linux)
+
+```sh
+brew tap samuelb/somatui
+brew install somatui
+```
+
+This installs a pre-built binary from the [latest release](https://github.com/samuelb/somatui/releases),
+so no compiler is required. Upgrade later with `brew upgrade somatui`.
+
+Recent versions of Homebrew ask you to explicitly trust a third-party tap before
+installing from it. If you see an "untrusted tap" error, run
+`brew trust samuelb/somatui` and try again.
+
 ### Pre-built Binaries
 
 1.  Download the latest release for your platform from the [Releases page](https://github.com/samuelb/somatui/releases).

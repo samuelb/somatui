@@ -132,3 +132,82 @@ jobs:
           tag_name: ${{ inputs.version }}
           body: ${{ steps.changelog.outputs.body }}
           files: dist/*
+
+  homebrew:
+    name: Update Homebrew tap
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download "${{ inputs.version }}" --repo "${{ github.repository }}" --pattern checksums.txt
+
+      - name: Check out tap
+        uses: actions/checkout@v7
+        with:
+          repository: samuelb/homebrew-somatui
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+
+      - name: Render formula
+        run: |
+          VERSION="${{ inputs.version }}"
+          BARE="${VERSION#v}"
+          sha() { grep " $1\$" checksums.txt | awk '{print $1}'; }
+          DARWIN_ARM64="$(sha somatui_darwin_arm64)"
+          DARWIN_AMD64="$(sha somatui_darwin_amd64)"
+          LINUX_AMD64="$(sha somatui_linux_amd64)"
+          if [ -z "$DARWIN_ARM64" ] || [ -z "$DARWIN_AMD64" ] || [ -z "$LINUX_AMD64" ]; then
+            echo "Error: missing a checksum for one or more binaries" >&2
+            cat checksums.txt >&2
+            exit 1
+          fi
+          mkdir -p tap/Formula
+          cat > tap/Formula/somatui.rb <<EOF
+          class Somatui < Formula
+            desc "Terminal UI client for streaming SomaFM radio channels"
+            homepage "https://github.com/samuelb/somatui"
+            version "${BARE}"
+            license "MIT"
+
+            on_macos do
+              on_arm do
+                url "https://github.com/samuelb/somatui/releases/download/${VERSION}/somatui_darwin_arm64"
+                sha256 "${DARWIN_ARM64}"
+              end
+              on_intel do
+                url "https://github.com/samuelb/somatui/releases/download/${VERSION}/somatui_darwin_amd64"
+                sha256 "${DARWIN_AMD64}"
+              end
+            end
+
+            on_linux do
+              on_intel do
+                url "https://github.com/samuelb/somatui/releases/download/${VERSION}/somatui_linux_amd64"
+                sha256 "${LINUX_AMD64}"
+              end
+            end
+
+            def install
+              bin.install Dir["somatui_*"].first => "somatui"
+            end
+
+            test do
+              assert_match version.to_s, shell_output("#{bin}/somatui --version")
+            end
+          end
+          EOF
+
+      - name: Commit and push
+        run: |
+          cd tap
+          if git diff --quiet -- Formula/somatui.rb; then
+            echo "Formula already up to date; nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/somatui.rb
+          git commit -m "somatui ${{ inputs.version }}"
+          git push
