@@ -12,10 +12,28 @@ import (
 
 const allowedHostSuffix = ".somafm.com"
 
+// maxRedirects matches net/http's default redirect limit, re-applied here
+// because supplying CheckRedirect replaces that default.
+const maxRedirects = 10
+
 // HTTPClient is the process-wide HTTP client, shared so connections to the
 // SomaFM hosts are reused across playlist, channel, stream, and metadata
 // requests. Per-request deadlines come from the request context.
-var HTTPClient = &http.Client{}
+//
+// CheckRedirect re-validates every redirect target: ValidateURL only guards
+// the initial URL, so without this a redirect (feasible over the allowed http
+// scheme) could send a request to an internal or otherwise disallowed host.
+var HTTPClient = &http.Client{
+	CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		if len(via) >= maxRedirects {
+			return fmt.Errorf("stopped after %d redirects", maxRedirects)
+		}
+		if err := ValidateURL(req.URL.String()); err != nil {
+			return fmt.Errorf("redirect to disallowed URL: %w", err)
+		}
+		return nil
+	},
+}
 
 // extraAllowedHostsMu guards extraAllowedHosts. ValidateURL reads this state
 // from any goroutine that makes a request (metadata, player, channel fetch),
