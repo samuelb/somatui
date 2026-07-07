@@ -13,7 +13,8 @@ A modern, TUI (Terminal User Interface) client for streaming and exploring SomaF
 ## Features
 
 - Client-server architecture: playback runs in a background server, so you
-  can close the TUI and the music keeps playing
+  can close the TUI and the music keeps playing (opt out with
+  `somatui --shutdown-on-exit`)
 - The server starts automatically when needed and exits on its own once
   playback is stopped and no client is connected
 - After an upgrade, the background server is restarted onto the new version the
@@ -157,7 +158,7 @@ background if one isn't running yet.
 
 | Command                    | Description                                              |
 | -------------------------- | -------------------------------------------------------- |
-| `somatui`                  | Start the TUI (spawns the playback server if needed)     |
+| `somatui`                  | Start the TUI (spawns the playback server if needed); `--shutdown-on-exit` stops playback and the server on quit |
 | `somatui play [channel]`   | Play a channel by ID or name match, or resume the last played channel when omitted |
 | `somatui list [--json]`    | List all channels (favorites first, marked with `*`)     |
 | `somatui favorite [--json] <channel>` | Toggle a channel's favorite flag (`fav` works too) |
@@ -175,7 +176,11 @@ background if one isn't running yet.
 Audio is streamed and decoded by a separate `somatui server` process that the
 TUI (and the CLI commands) talk to over a Unix socket. Quitting the TUI with
 <kbd>q</kbd> leaves the music playing — reopen `somatui` any time to pick the
-session back up, or use `somatui stop` to silence it. By default the server
+session back up, or use `somatui stop` to silence it. If you'd rather have
+quitting take everything down, start the TUI with `somatui --shutdown-on-exit`
+(or set `tui.shutdown_on_exit: true` in the
+[configuration file](#configuration)): quitting then stops playback and shuts
+the server down. By default the server
 keeps running until stopped explicitly (`somatui server stop` or the tray's
 Quit item); set an idle timeout with `somatui server --idle-timeout` or the
 `server.idle_timeout` setting in the [configuration file](#configuration) to
@@ -203,13 +208,13 @@ server, CLI, and TUI all keep working.
 | <kbd>+</kbd> / <kbd>-</kbd>         | Volume up / down                |
 | <kbd>f</kbd> / <kbd>*</kbd>         | Toggle favorite                 |
 | <kbd>/</kbd>                        | Filter channels                 |
-| <kbd>q</kbd> / <kbd>Ctrl+C</kbd>    | Quit the TUI (playback continues) |
+| <kbd>q</kbd> / <kbd>Ctrl+C</kbd>    | Quit the TUI (playback continues, unless started with `--shutdown-on-exit`) |
 
 ## Configuration
 
-The server flags can also be set in a configuration file, which is handy
-because the server is usually auto-spawned by the TUI or a CLI command and
-therefore runs without any flags. It lives at:
+The server and TUI flags can also be set in a configuration file, which is
+handy because the server is usually auto-spawned by the TUI or a CLI command
+and therefore runs without any flags. It lives at:
 
 - **Linux**: `$XDG_CONFIG_HOME/somatui/config.yaml` (usually `~/.config/somatui/config.yaml`)
 - **macOS**: `~/Library/Application Support/somatui/config.yaml`
@@ -220,7 +225,7 @@ uncomment something. Deleting the file is safe — it is recreated with the
 then-current defaults on the next server start.
 
 All settings are optional; anything omitted keeps its built-in default, and
-explicit `somatui server` flags take precedence over the file:
+explicit flags take precedence over the file:
 
 ```yaml
 server:
@@ -232,6 +237,11 @@ server:
   # Whether to show the system tray / menu-bar icon while the server runs.
   # Default: true. `tray: false` is the same as --no-tray.
   tray: false
+
+tui:
+  # Stop playback and shut down the server when the TUI exits.
+  # Default: false. Same as --shutdown-on-exit.
+  shutdown_on_exit: true
 ```
 
 A config file that exists but fails to parse (or contains unknown keys)

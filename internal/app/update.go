@@ -161,9 +161,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // NewHelpKeys returns additional help keys for the list.
-func NewHelpKeys(shutdownOnExit ...bool) ([]key.Binding, []key.Binding) {
+func NewHelpKeys(shutdownOnExit bool) ([]key.Binding, []key.Binding) {
 	quitHelp := "quit (keeps playing)"
-	if len(shutdownOnExit) > 0 && shutdownOnExit[0] {
+	if shutdownOnExit {
 		quitHelp = "quit (stops server)"
 	}
 	fullHelp := []key.Binding{

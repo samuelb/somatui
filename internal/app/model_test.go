@@ -81,7 +81,7 @@ func TestChannelsToItems_PreservesOrder(t *testing.T) {
 }
 
 func TestNewHelpKeys_ReturnsBindings(t *testing.T) {
-	full, short := NewHelpKeys()
+	full, short := NewHelpKeys(false)
 
 	assert.NotEmpty(t, full)
 	assert.NotEmpty(t, short)

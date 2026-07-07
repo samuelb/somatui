@@ -52,8 +52,6 @@ func main() {
 		fmt.Printf("somatui %s (commit: %s, built: %s)\n", version, commit, date)
 	case "--help", "-h", "help":
 		printUsage(os.Stdout)
-	case "--shutdown-on-exit":
-		runTUI(args)
 	case "server":
 		if len(args) > 1 && args[1] == "stop" {
 			runServerStop()
@@ -313,27 +311,37 @@ func runTUI(args []string) {
 
 	// Bridge server events into the Bubble Tea program, reconnecting (and
 	// respawning the server) when the connection drops.
-	go runBridge(p, c, socketPath, bridgeDone)
+	bridgeExited := make(chan struct{})
+	go func() {
+		defer close(bridgeExited)
+		runBridge(p, c, socketPath, bridgeDone, *shutdownOnExit)
+	}()
 
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("Alas, there's been an error: %v\n", err)
 		os.Exit(1)
 	}
 	m.OnExit()
+	if *shutdownOnExit {
+		// The bridge may be mid-reconnect, about to spawn a replacement
+		// server; wait for it so that server is shut down too, not orphaned.
+		<-bridgeExited
+	}
 }
 
 // runBridge forwards server events to the program. When the connection is
 // lost it re-establishes it (spawning a new server if needed) and hands the
 // fresh client, and its version, to the model.
-func runBridge(p *tea.Program, c *client.Client, socketPath string, done <-chan struct{}) {
+func runBridge(p *tea.Program, c *client.Client, socketPath string, done <-chan struct{}, shutdownOnExit bool) {
 	for {
+	events:
 		for {
 			select {
 			case <-done:
 				return
 			case ev, ok := <-c.Events():
 				if !ok {
-					goto reconnect
+					break events
 				}
 				switch v := ev.(type) {
 				case protocol.PlaybackState:
@@ -344,7 +352,6 @@ func runBridge(p *tea.Program, c *client.Client, socketPath string, done <-chan 
 			}
 		}
 
-	reconnect:
 		p.Send(app.ServerLostMsg{})
 		select {
 		case <-done:
@@ -355,6 +362,17 @@ func runBridge(p *tea.Program, c *client.Client, socketPath string, done <-chan 
 		if err != nil {
 			p.Send(app.ServerGoneMsg{Err: err})
 			return
+		}
+		select {
+		case <-done:
+			// The TUI quit while reconnect was (possibly) spawning a fresh
+			// server; honor shutdown-on-exit instead of orphaning it.
+			if shutdownOnExit {
+				_ = newClient.Shutdown()
+			}
+			_ = newClient.Close()
+			return
+		default:
 		}
 		_ = c.Close()
 		c = newClient
