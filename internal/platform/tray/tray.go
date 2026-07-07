@@ -49,7 +49,7 @@ type Tray struct {
 	channels  []Channel
 
 	titleItem   *systray.MenuItem
-	playPause   *systray.MenuItem
+	playStop    *systray.MenuItem
 	favItem     *systray.MenuItem
 	channelsTop *systray.MenuItem
 	// channelItems is a grow-only pool of submenu items reused across catalog
@@ -151,10 +151,9 @@ func (t *Tray) build() {
 	title := systray.AddMenuItem("Stopped", "")
 	title.Disable()
 	systray.AddSeparator()
-	playPause := systray.AddMenuItem("Play", "Play or pause")
+	playStop := systray.AddMenuItem("Play", "Play or stop playback")
 	next := systray.AddMenuItem("Next", "Next channel")
 	prev := systray.AddMenuItem("Previous", "Previous channel")
-	stop := systray.AddMenuItem("Stop", "Stop playback")
 	fav := systray.AddMenuItemCheckbox("★ Favorite", "Mark or unmark the playing channel as favorite", false)
 	systray.AddSeparator()
 	channelsTop := systray.AddMenuItem("Channels", "Play a channel")
@@ -163,7 +162,7 @@ func (t *Tray) build() {
 
 	t.mu.Lock()
 	t.titleItem = title
-	t.playPause = playPause
+	t.playStop = playStop
 	t.favItem = fav
 	t.channelsTop = channelsTop
 	t.ready = true
@@ -174,14 +173,12 @@ func (t *Tray) build() {
 	go func() {
 		for {
 			select {
-			case <-playPause.ClickedCh:
+			case <-playStop.ClickedCh:
 				t.send(platform.MPRISPlayPauseMsg{})
 			case <-next.ClickedCh:
 				t.send(platform.MPRISNextMsg{})
 			case <-prev.ClickedCh:
 				t.send(platform.MPRISPrevMsg{})
-			case <-stop.ClickedCh:
-				t.send(platform.MPRISStopMsg{})
 			case <-fav.ClickedCh:
 				t.mu.Lock()
 				id := t.playingID
@@ -205,7 +202,7 @@ func (t *Tray) applyLocked() {
 	if t.playing {
 		label := playbackLabel(t.station, t.track)
 		t.titleItem.SetTitle("♪ " + label)
-		t.playPause.SetTitle("Pause")
+		t.playStop.SetTitle("Stop")
 		systray.SetTooltip("SomaTUI — " + label)
 		t.favItem.Enable()
 		if t.favoriteLocked(t.playingID) {
@@ -215,7 +212,7 @@ func (t *Tray) applyLocked() {
 		}
 	} else {
 		t.titleItem.SetTitle("Stopped")
-		t.playPause.SetTitle("Play")
+		t.playStop.SetTitle("Play")
 		systray.SetTooltip("SomaTUI")
 		t.favItem.Disable()
 		t.favItem.Uncheck()

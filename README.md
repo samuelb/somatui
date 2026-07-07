@@ -34,8 +34,8 @@ A modern, TUI (Terminal User Interface) client for streaming and exploring SomaF
 - MPRIS desktop integration (Linux) — media keys keep working even with the
   TUI closed
 - System tray / menu-bar icon (macOS and Linux) — shows the current track,
-  lets you pick any channel from a menu, and gives you play/pause, next,
-  previous, and stop while the server runs, even with the TUI closed. Disable
+  lets you pick any channel from a menu, and gives you play/stop, next, and
+  previous while the server runs, even with the TUI closed. Disable
   it with `somatui server --no-tray`.
 
 ## Installation
