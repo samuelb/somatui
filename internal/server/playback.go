@@ -265,16 +265,24 @@ func (s *Server) cancelReconnectLocked() {
 	}
 }
 
-// updateMPRISLocked mirrors the playback state to the desktop.
+// updateMPRISLocked mirrors the playback state to the desktop integrations
+// (MPRIS and the tray). Both are optional and skipped when absent.
 func (s *Server) updateMPRISLocked() {
-	if s.mpris == nil {
-		return
+	playing := s.status == protocol.StatusPlaying
+	if s.mpris != nil {
+		if playing {
+			// Use the channel title as artist since SomaFM streams don't have
+			// separate artist info.
+			s.mpris.SetPlaying(s.channelTitle, s.trackTitle, s.channelTitle)
+		} else {
+			s.mpris.SetStopped()
+		}
 	}
-	if s.status == protocol.StatusPlaying {
-		// Use the channel title as artist since SomaFM streams don't have
-		// separate artist info.
-		s.mpris.SetPlaying(s.channelTitle, s.trackTitle, s.channelTitle)
-		return
+	if s.tray != nil {
+		if playing {
+			s.tray.SetPlaying(s.channelID, s.channelTitle, s.trackTitle)
+		} else {
+			s.tray.SetStopped()
+		}
 	}
-	s.mpris.SetStopped()
 }

@@ -14,6 +14,7 @@ import (
 	"somatui/internal/audio"
 	"somatui/internal/channels"
 	"somatui/internal/platform"
+	"somatui/internal/platform/tray"
 	"somatui/internal/protocol"
 	"somatui/internal/state"
 )
@@ -32,6 +33,7 @@ type Config struct {
 	Player      audio.Player
 	State       *state.State
 	MPRIS       *platform.MPRIS // may be nil
+	Tray        *tray.Tray      // may be nil
 	IdleTimeout time.Duration   // 0 disables idle exit
 }
 
@@ -43,6 +45,7 @@ type Server struct {
 	player      audio.Player
 	st          *state.State
 	mpris       *platform.MPRIS
+	tray        *tray.Tray
 	idleTimeout time.Duration
 
 	shutdownOnce sync.Once
@@ -73,6 +76,7 @@ func New(cfg Config) *Server {
 		player:      cfg.Player,
 		st:          cfg.State,
 		mpris:       cfg.MPRIS,
+		tray:        cfg.Tray,
 		idleTimeout: cfg.IdleTimeout,
 		done:        make(chan struct{}),
 		conns:       make(map[*conn]struct{}),
@@ -85,6 +89,12 @@ func New(cfg Config) *Server {
 	if s.mpris != nil {
 		s.mpris.SetSender(mprisSender{s})
 		s.mpris.SetVolume(cfg.State.GetVolume())
+	}
+	if s.tray != nil {
+		// The tray reuses the MPRIS command router: its menu items map onto
+		// the same PlayPause/Next/Prev/Stop messages.
+		s.tray.SetSender(mprisSender{s})
+		s.tray.SetOnQuit(s.Shutdown)
 	}
 	return s
 }
@@ -137,6 +147,9 @@ func (s *Server) Shutdown() {
 		s.player.Stop()
 		if s.mpris != nil {
 			s.mpris.Close()
+		}
+		if s.tray != nil {
+			s.tray.Quit()
 		}
 		close(s.done)
 		if ln != nil {
@@ -396,8 +409,10 @@ func (s *Server) broadcastStateLocked() {
 	}
 }
 
-// broadcastChannelsLocked pushes the catalog payload to all clients.
+// broadcastChannelsLocked pushes the catalog payload to all clients and mirrors
+// it into the tray's channel picker.
 func (s *Server) broadcastChannelsLocked() {
+	s.pushChannelsToTrayLocked()
 	ev, err := protocol.NewEvent(protocol.EventChannels, s.channelsPayloadLocked())
 	if err != nil {
 		log.Printf("error encoding channels event: %v", err)
@@ -406,4 +421,21 @@ func (s *Server) broadcastChannelsLocked() {
 	for c := range s.conns {
 		c.sendEvent(ev)
 	}
+}
+
+// pushChannelsToTrayLocked hands the current favorites-first catalog to the
+// tray's channel picker.
+func (s *Server) pushChannelsToTrayLocked() {
+	if s.tray == nil {
+		return
+	}
+	fav := make(map[string]bool, len(s.st.FavoriteChannelIDs))
+	for _, id := range s.st.FavoriteChannelIDs {
+		fav[id] = true
+	}
+	list := make([]tray.Channel, len(s.catalog))
+	for i, ch := range s.catalog {
+		list[i] = tray.Channel{ID: ch.ID, Title: ch.Title, Favorite: fav[ch.ID]}
+	}
+	s.tray.SetChannels(list)
 }

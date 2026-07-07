@@ -96,13 +96,16 @@ jobs:
           go-version-file: go.mod
 
       - name: Build universal binary
+        # CGO is required on macOS for the menu-bar tray (Cocoa). The runner is
+        # Apple Silicon, so the amd64 slice is a cgo cross-compile via clang's
+        # -arch; the macOS SDK ships universal libraries so both slices link.
         env:
-          CGO_ENABLED: 0
+          CGO_ENABLED: 1
           GOOS: darwin
         run: |
           LDFLAGS="-s -w -X main.version=${{ inputs.version }} -X main.commit=${GITHUB_SHA::7} -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          GOARCH=amd64 go build -ldflags "$LDFLAGS" -o somatui_darwin_amd64 ./cmd/somatui
-          GOARCH=arm64 go build -ldflags "$LDFLAGS" -o somatui_darwin_arm64 ./cmd/somatui
+          GOARCH=arm64 CC="clang -arch arm64" go build -ldflags "$LDFLAGS" -o somatui_darwin_arm64 ./cmd/somatui
+          GOARCH=amd64 CC="clang -arch x86_64" go build -ldflags "$LDFLAGS" -o somatui_darwin_amd64 ./cmd/somatui
           lipo -create -output somatui_darwin_universal somatui_darwin_amd64 somatui_darwin_arm64
           lipo -info somatui_darwin_universal
 

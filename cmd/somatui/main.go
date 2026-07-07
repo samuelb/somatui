@@ -15,6 +15,7 @@ import (
 	"somatui/internal/audio"
 	"somatui/internal/client"
 	"somatui/internal/platform"
+	"somatui/internal/platform/tray"
 	"somatui/internal/protocol"
 	"somatui/internal/server"
 	"somatui/internal/state"
@@ -95,6 +96,7 @@ func printUsage(w io.Writer) {
   somatui status [--json]        show what is playing
   somatui volume [<0-100>|+n|-n] show, set, or adjust the playback volume
   somatui server [flags]         run the playback server in the foreground
+                                 (--no-tray hides the tray / menu-bar icon)
   somatui server stop            shut down the playback server
   somatui --version              print version information
   somatui --help                 show this help
@@ -107,6 +109,8 @@ func runServer(args []string) {
 	fs := flag.NewFlagSet("server", flag.ExitOnError)
 	idleTimeout := fs.Duration("idle-timeout", server.DefaultIdleTimeout,
 		"exit after this long with no clients and stopped playback (0 disables)")
+	noTray := fs.Bool("no-tray", false,
+		"do not show the system tray / menu-bar icon while the server runs")
 	_ = fs.Parse(args)
 
 	// Bind the socket before the (potentially slow) audio init: a bound
@@ -143,12 +147,21 @@ func runServer(args []string) {
 		log.Printf("warning: MPRIS initialization failed: %v", err)
 	}
 
+	// The tray icon lives in the server process, so it appears whenever the
+	// server is running. It is skipped when disabled, unsupported, or when no
+	// GUI is present (a headless host), so the server still runs anywhere.
+	var tr *tray.Tray
+	if !*noTray && tray.Available() {
+		tr = tray.New()
+	}
+
 	srv := server.New(server.Config{
 		Version:     version,
 		UserAgent:   userAgent(),
 		Player:      player,
 		State:       appState,
 		MPRIS:       mpris,
+		Tray:        tr,
 		IdleTimeout: *idleTimeout,
 	})
 
@@ -162,10 +175,26 @@ func runServer(args []string) {
 		srv.Shutdown()
 	}()
 
-	err = srv.Run(ln)
+	// The tray owns the process's native GUI run loop and must run on the main
+	// goroutine, so serve connections on a goroutine and block on the tray.
+	// srv.Shutdown (from a signal, the idle timer, or the tray's Quit item)
+	// stops the tray, which unblocks Run. Without a tray, serve on the main
+	// goroutine as before.
+	var runErr error
+	if tr != nil {
+		runErrCh := make(chan error, 1)
+		go func() {
+			runErrCh <- srv.Run(ln)
+			srv.Shutdown() // idempotent; unblocks the tray on any exit path
+		}()
+		tr.Run(nil)
+		runErr = <-runErrCh
+	} else {
+		runErr = srv.Run(ln)
+	}
 	cleanup()
-	if err != nil {
-		log.Fatalf("server error: %v", err)
+	if runErr != nil {
+		log.Fatalf("server error: %v", runErr)
 	}
 	// Shutdown's player.Stop fades out asynchronously; give it a moment so
 	// the audio doesn't cut off hard.

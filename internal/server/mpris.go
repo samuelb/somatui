@@ -22,6 +22,8 @@ func (m mprisSender) Send(msg any) {
 		m.s.Stop()
 	case platform.MPRISPlayPauseMsg:
 		go func() { _, _ = m.s.PlayPause() }()
+	case platform.PlayChannelMsg:
+		go func() { _, _ = m.s.Play(v.ID) }()
 	case platform.MPRISNextMsg:
 		go func() { _, _ = m.s.PlayRelative(1) }()
 	case platform.MPRISPrevMsg:

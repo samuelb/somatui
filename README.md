@@ -32,6 +32,10 @@ A modern, TUI (Terminal User Interface) client for streaming and exploring SomaF
 - Smooth, keyboard-driven navigation and playback controls
 - MPRIS desktop integration (Linux) — media keys keep working even with the
   TUI closed
+- System tray / menu-bar icon (macOS and Linux) — shows the current track,
+  lets you pick any channel from a menu, and gives you play/pause, next,
+  previous, and stop while the server runs, even with the TUI closed. Disable
+  it with `somatui server --no-tray`.
 
 ## Installation
 
@@ -162,7 +166,7 @@ background if one isn't running yet.
 | `somatui stop`             | Stop playback                                            |
 | `somatui status [--json]`  | Show what is playing (`--json` for status bars/scripts)  |
 | `somatui volume [<0-100>\|+n\|-n]` | Show the volume, set it, or adjust it relative to the current value |
-| `somatui server`           | Run the playback server in the foreground                |
+| `somatui server`           | Run the playback server in the foreground (`--no-tray` hides the tray icon) |
 | `somatui server stop`      | Shut down the playback server                            |
 | `somatui --version`        | Print version information                                |
 
@@ -174,6 +178,14 @@ TUI (and the CLI commands) talk to over a Unix socket. Quitting the TUI with
 session back up, or use `somatui stop` to silence it. Once playback is
 stopped and no client is connected, the server exits on its own after a grace
 period (2 minutes by default, tunable with `somatui server --idle-timeout`).
+
+While the server runs it shows a tray / menu-bar icon (macOS and Linux, where a
+tray host is available) with the current track, a "Channels" submenu for
+switching stations (favorites first, marked ★, the playing one marked ▸), and
+play/pause, next, previous, and stop controls, plus a "Quit" item that shuts the
+server down. Pass `somatui server --no-tray` to run without it. On a headless
+host (no display or GUI session) the tray is skipped automatically and the
+server, CLI, and TUI all keep working.
 
 ### Keyboard Controls
 
