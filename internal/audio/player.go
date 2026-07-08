@@ -311,7 +311,10 @@ func (p *AudioPlayer) drainTrackUpdates() {
 	}
 }
 
-// Errors returns a channel for async stream errors.
+// Errors returns a channel for async stream errors. The channel is buffered
+// and reportError drops on a full buffer, so a reader is not guaranteed to see
+// every failure: it may miss or coalesce errors from a burst. Treat it as "the
+// stream is currently unhealthy" signalling, not a lossless error log.
 func (p *AudioPlayer) Errors() <-chan error {
 	return p.errChan
 }
@@ -420,6 +423,8 @@ func (p *AudioPlayer) reportError(ctx context.Context, err error) {
 	if ctx != nil && ctx.Err() != nil {
 		return
 	}
+	// Non-blocking send: if the buffer is full the error is dropped rather than
+	// stalling the session goroutine. See Errors for what a reader can rely on.
 	select {
 	case p.errChan <- err:
 	default:
