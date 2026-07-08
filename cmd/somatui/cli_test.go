@@ -11,6 +11,104 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var testCatalog = []channels.Channel{
+	{ID: "dronezone", Title: "Drone Zone", Genre: "ambient"},
+	// "dronezone" is also a substring of this ID, so an exact-ID query must
+	// resolve to the channel above rather than report an ambiguous match.
+	{ID: "dronezonedeep", Title: "Drone Zone Deep", Genre: "ambient"},
+	{ID: "groovesalad", Title: "Groove Salad", Genre: "ambient|electronica"},
+	{ID: "secretagent", Title: "Secret Agent", Genre: "lounge"},
+	{ID: "deepspaceone", Title: "Deep Space One", Genre: "ambient|space"},
+}
+
+func TestResolveChannel(t *testing.T) {
+	tests := []struct {
+		name    string
+		query   string
+		wantID  string
+		wantErr string // substring the error must contain; empty means success
+	}{
+		{name: "exact id", query: "groovesalad", wantID: "groovesalad"},
+		// "dronezone" is an exact ID and a substring of "dronezonedeep";
+		// the exact match must win instead of erroring as ambiguous.
+		{name: "exact id beats substring", query: "dronezone", wantID: "dronezone"},
+		{name: "unique id substring", query: "secret", wantID: "secretagent"},
+		{name: "unique title substring", query: "Groove", wantID: "groovesalad"},
+		{name: "case-insensitive title", query: "deep space", wantID: "deepspaceone"},
+		{name: "no match", query: "jazz", wantErr: "no channel matches"},
+		// "one" is a substring of both "dronezone" and "deepspaceone".
+		{name: "ambiguous substring", query: "one", wantErr: "ambiguous"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ch, err := resolveChannel(testCatalog, tt.query)
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantID, ch.ID)
+		})
+	}
+}
+
+func TestResolveChannel_AmbiguousListsMatches(t *testing.T) {
+	// An ambiguous query must name each candidate (as "id (Title)") so the
+	// user can disambiguate.
+	catalog := []channels.Channel{
+		{ID: "spacestation", Title: "Space Station"},
+		{ID: "deepspace", Title: "Deep Space"},
+	}
+	_, err := resolveChannel(catalog, "space")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "spacestation (Space Station)")
+	assert.Contains(t, err.Error(), "deepspace (Deep Space)")
+}
+
+func TestFindChannelByID(t *testing.T) {
+	ch, ok := findChannelByID(testCatalog, "secretagent")
+	require.True(t, ok)
+	assert.Equal(t, "Secret Agent", ch.Title)
+
+	_, ok = findChannelByID(testCatalog, "SecretAgent") // IDs are exact, case-sensitive
+	assert.False(t, ok)
+
+	_, ok = findChannelByID(testCatalog, "missing")
+	assert.False(t, ok)
+
+	_, ok = findChannelByID(nil, "anything")
+	assert.False(t, ok)
+}
+
+func TestVolumePercent(t *testing.T) {
+	tests := []struct {
+		v    float64
+		want int
+	}{
+		{v: 0, want: 0},
+		{v: 1, want: 100},
+		{v: 0.5, want: 50},
+		{v: 0.004, want: 0},   // rounds down
+		{v: 0.005, want: 1},   // rounds up at the half
+		{v: 0.666, want: 67},  // standard rounding
+		{v: 0.995, want: 100}, // rounds up to full
+	}
+	for _, tt := range tests {
+		assert.Equalf(t, tt.want, volumePercent(tt.v), "volumePercent(%v)", tt.v)
+	}
+}
+
+func TestPrintUsage(t *testing.T) {
+	var b strings.Builder
+	printUsage(&b)
+	out := b.String()
+	// Every user-facing subcommand should be documented in the usage text.
+	for _, cmd := range []string{"play", "list", "favorite", "next", "prev", "pause", "stop", "status", "volume", "server"} {
+		assert.Containsf(t, out, "somatui "+cmd, "usage missing %q", cmd)
+	}
+}
+
 func TestFormatChannelList_MarksFavoritesAndKeepsOrder(t *testing.T) {
 	payload := protocol.ChannelsPayload{
 		Channels: []channels.Channel{

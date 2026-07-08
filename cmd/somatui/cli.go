@@ -412,7 +412,13 @@ func runStatus(args []string) {
 	if st.StreamError != "" {
 		fmt.Printf("Error:   %s\n", st.StreamError)
 	}
-	fmt.Printf("Volume:  %d%%\n", int(st.Volume*100+0.5))
+	fmt.Printf("Volume:  %d%%\n", volumePercent(st.Volume))
+}
+
+// volumePercent converts a volume fraction in [0, 1] to a rounded percentage
+// for display.
+func volumePercent(v float64) int {
+	return int(v*100 + 0.5)
 }
 
 // printJSON writes v as a single JSON line.
@@ -455,7 +461,7 @@ func runVolume(args []string) {
 	if err != nil {
 		fail("%v", err)
 	}
-	fmt.Printf("Volume:  %d%%\n", int(st.Volume*100+0.5))
+	fmt.Printf("Volume:  %d%%\n", volumePercent(st.Volume))
 }
 
 // parseVolumeArg parses a volume argument: an absolute percentage in [0, 100],
@@ -478,14 +484,14 @@ func showVolume() {
 		if err != nil {
 			fail("%v", err)
 		}
-		fmt.Printf("Volume:  %d%%\n", int(st.Volume*100+0.5))
+		fmt.Printf("Volume:  %d%%\n", volumePercent(st.Volume))
 		return
 	}
 	st, err := state.LoadState()
 	if err != nil {
 		fail("%v", err)
 	}
-	fmt.Printf("Volume:  %d%%\n", int(st.GetVolume()*100+0.5))
+	fmt.Printf("Volume:  %d%%\n", volumePercent(st.GetVolume()))
 }
 
 func runServerStop() {
