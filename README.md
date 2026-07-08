@@ -153,14 +153,14 @@ Simply run:
 ./soma
 ```
 
-This opens the TUI and automatically starts the playback server in the
+This opens the TUI and automatically starts the playback daemon in the
 background if one isn't running yet.
 
 ### Commands
 
 | Command                    | Description                                              |
 | -------------------------- | -------------------------------------------------------- |
-| `soma`                     | Start the TUI (spawns the playback server if needed); `--shutdown-on-exit` stops playback and the server on quit |
+| `soma`                     | Start the TUI (spawns the playback daemon if needed); `--shutdown-on-exit` stops playback and the server on quit |
 | `soma play [channel]`      | Play a channel by ID or name match, or resume the last played channel when omitted |
 | `soma list [--json]`       | List all channels (favorites first, marked with `*`)     |
 | `soma favorite [--json] <channel>` | Toggle a channel's favorite flag (`fav` works too) |
@@ -169,14 +169,17 @@ background if one isn't running yet.
 | `soma stop`                | Stop playback                                            |
 | `soma status [--json]`     | Show what is playing (`--json` for status bars/scripts)  |
 | `soma volume [<0-100>\|+n\|-n]` | Show the volume, set it, or adjust it relative to the current value |
-| `soma daemon`              | Run the playback server in the foreground (`--no-tray` hides the tray icon) |
-| `soma daemon stop`         | Shut down the playback server                            |
+| `soma daemon`              | Run the playback daemon in the foreground (`--no-tray` hides the tray icon) |
+| `soma daemon stop`         | Shut down the playback daemon                            |
 | `soma --version`           | Print version information                                |
 
 ### Background playback
 
 Audio is streamed and decoded by a separate `soma daemon` process that the
-TUI (and the CLI commands) talk to over a Unix socket. Quitting the TUI with
+TUI (and the CLI commands) talk to over a Unix socket. It normally starts
+automatically the first time the TUI or a CLI command needs it, but you can
+also start it yourself in the foreground with `soma daemon` — handy for
+watching its logs or running it under a service manager. Quitting the TUI with
 <kbd>q</kbd> leaves the music playing — reopen `soma` any time to pick the
 session back up, or use `soma stop` to silence it. If you'd rather have
 quitting take everything down, start the TUI with `soma --shutdown-on-exit`
@@ -254,7 +257,7 @@ a typo never silently falls back to defaults.
 
 - **Config**: `~/.config/somad/` (Linux) or `~/Library/Application Support/somad/` (macOS)
 - **State**: `~/.local/state/somad/` (Linux) or `~/Library/Application Support/somad/` (macOS) —
-  also holds `server.log`, the log of the auto-spawned playback server
+  also holds `server.log`, the log of the auto-spawned playback daemon
 - **Cache**: `~/.cache/somad/` (Linux) or `~/Library/Caches/somad/` (macOS)
 - **Socket**: `$XDG_RUNTIME_DIR/somad.sock` (Linux) or a per-user temp
   directory (macOS); override with `$SOMAD_SOCKET`
