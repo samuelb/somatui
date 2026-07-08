@@ -402,6 +402,34 @@ func TestToggleFavorite_ConcurrentReadIsRaceFree(t *testing.T) {
 	wg.Wait()
 }
 
+// TestSaveState_DropsStaleWrites verifies that a save carrying an older
+// mutation sequence never clobbers the state written by a newer one, even when
+// the saves arrive out of order (as concurrent callers may deliver them).
+func TestSaveState_DropsStaleWrites(t *testing.T) {
+	s, _ := newTestServer(t, Config{})
+
+	var mu sync.Mutex
+	var last string
+	s.persist = func(st *state.State) error {
+		mu.Lock()
+		defer mu.Unlock()
+		last = st.LastSelectedChannelID
+		return nil
+	}
+
+	newer := &state.State{LastSelectedChannelID: "newer"}
+	older := &state.State{LastSelectedChannelID: "older"}
+
+	// The newer mutation (seq 2) reaches disk first; the older one (seq 1)
+	// arrives late and must be dropped rather than overwrite it.
+	s.saveState(2, newer)
+	s.saveState(1, older)
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, "newer", last, "stale save clobbered newer state")
+}
+
 func TestTrackUpdate_BroadcastsTitle(t *testing.T) {
 	s, player := newTestServer(t, Config{})
 	go s.watchTrackUpdates()

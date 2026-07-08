@@ -69,10 +69,12 @@ func (s *Server) playChannel(channelID string, userInitiated bool) (protocol.Pla
 	s.trackTitle = ""
 	s.streamErr = ""
 	var stateToSave *state.State
+	var saveSeq uint64
 	if userInitiated {
 		s.reconnectAttempt = 0
 		s.st.LastSelectedChannelID = ch.ID
 		stateToSave = s.st.Clone()
+		saveSeq = s.nextSaveSeqLocked()
 	}
 	s.broadcastStateLocked()
 	playlists := ch.Playlists
@@ -80,7 +82,7 @@ func (s *Server) playChannel(channelID string, userInitiated bool) (protocol.Pla
 	s.mu.Unlock()
 
 	if stateToSave != nil {
-		s.saveState(stateToSave)
+		s.saveState(saveSeq, stateToSave)
 	}
 
 	playlistURL := channels.SelectMP3PlaylistURL(playlists)
@@ -234,6 +236,7 @@ func (s *Server) SetVolume(v float64, mirrorToMPRIS bool) protocol.PlaybackState
 	s.player.SetVolume(v)
 	s.st.SetVolume(v)
 	stateToSave := s.st.Clone()
+	saveSeq := s.nextSaveSeqLocked()
 	if mirrorToMPRIS && s.mpris != nil {
 		s.mpris.SetVolume(v)
 	}
@@ -241,7 +244,7 @@ func (s *Server) SetVolume(v float64, mirrorToMPRIS bool) protocol.PlaybackState
 	snap := s.snapshotLocked()
 	s.mu.Unlock()
 
-	s.saveState(stateToSave)
+	s.saveState(saveSeq, stateToSave)
 	return snap
 }
 

@@ -53,6 +53,12 @@ type Server struct {
 	// tests override it to avoid fsync-heavy disk writes on every mutation.
 	persist func(*state.State) error
 
+	// saveMu serializes persist calls so concurrent saves never interleave on
+	// disk; savedSeq (guarded by saveMu) is the highest mutation sequence
+	// already written, so a slow save can be dropped once a newer one lands.
+	saveMu   sync.Mutex
+	savedSeq uint64
+
 	shutdownOnce sync.Once
 	done         chan struct{} // closed by Shutdown
 
@@ -69,6 +75,7 @@ type Server struct {
 	streamErr        string
 	reconnectAttempt int
 	playGen          uint64 // bumped by every play/stop; stale async work backs out
+	saveSeq          uint64 // bumped per state mutation; orders persist writes
 	reconnectTimer   *time.Timer
 	idleTimer        *time.Timer
 }
@@ -339,6 +346,7 @@ func (s *Server) ToggleFavorite(channelID string) ([]string, error) {
 	}
 	s.st.ToggleFavorite(channelID)
 	stateToSave := s.st.Clone()
+	saveSeq := s.nextSaveSeqLocked()
 	s.catalog = sortChannelsWithFavorites(s.catalog, s.st.FavoriteChannelIDs)
 	s.broadcastChannelsLocked()
 	// Clone: the caller marshals this after the lock is released, but a later
@@ -346,11 +354,28 @@ func (s *Server) ToggleFavorite(channelID string) ([]string, error) {
 	favorites := slices.Clone(s.st.FavoriteChannelIDs)
 	s.mu.Unlock()
 
-	s.saveState(stateToSave)
+	s.saveState(saveSeq, stateToSave)
 	return favorites, nil
 }
 
-func (s *Server) saveState(st *state.State) {
+// nextSaveSeqLocked stamps a state mutation with a monotonic sequence so
+// saveState can serialize writes and drop out-of-order ones. Caller holds s.mu.
+func (s *Server) nextSaveSeqLocked() uint64 {
+	s.saveSeq++
+	return s.saveSeq
+}
+
+// saveState persists st, serialized against other saves so writes never
+// interleave. seq is captured under s.mu when st was cloned; a save whose seq
+// is not newer than the last one written is dropped, so a slow save can never
+// clobber the state produced by a newer mutation.
+func (s *Server) saveState(seq uint64, st *state.State) {
+	s.saveMu.Lock()
+	defer s.saveMu.Unlock()
+	if seq <= s.savedSeq {
+		return
+	}
+	s.savedSeq = seq
 	if err := s.persist(st); err != nil {
 		log.Printf("error saving state: %v", err)
 	}
