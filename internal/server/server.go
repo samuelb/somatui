@@ -49,6 +49,10 @@ type Server struct {
 	tray        *tray.Tray
 	idleTimeout time.Duration
 
+	// persist writes user state to disk. It defaults to state.SaveState;
+	// tests override it to avoid fsync-heavy disk writes on every mutation.
+	persist func(*state.State) error
+
 	shutdownOnce sync.Once
 	done         chan struct{} // closed by Shutdown
 
@@ -79,6 +83,7 @@ func New(cfg Config) *Server {
 		mpris:       cfg.MPRIS,
 		tray:        cfg.Tray,
 		idleTimeout: cfg.IdleTimeout,
+		persist:     state.SaveState,
 		done:        make(chan struct{}),
 		conns:       make(map[*conn]struct{}),
 		status:      protocol.StatusStopped,
@@ -341,12 +346,12 @@ func (s *Server) ToggleFavorite(channelID string) ([]string, error) {
 	favorites := slices.Clone(s.st.FavoriteChannelIDs)
 	s.mu.Unlock()
 
-	saveState(stateToSave)
+	s.saveState(stateToSave)
 	return favorites, nil
 }
 
-func saveState(st *state.State) {
-	if err := state.SaveState(st); err != nil {
+func (s *Server) saveState(st *state.State) {
+	if err := s.persist(st); err != nil {
 		log.Printf("error saving state: %v", err)
 	}
 }

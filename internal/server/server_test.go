@@ -369,6 +369,10 @@ func TestToggleFavorite_ViaCommandSender(t *testing.T) {
 // stops returning a copy.
 func TestToggleFavorite_ConcurrentReadIsRaceFree(t *testing.T) {
 	s, _ := newTestServer(t, Config{})
+	// This test hammers ToggleFavorite thousands of times to exercise the
+	// slice-copy race; the disk write on each call is irrelevant here and
+	// would otherwise dominate the runtime with fsyncs.
+	s.persist = func(*state.State) error { return nil }
 
 	var wg sync.WaitGroup
 	stop := make(chan struct{})

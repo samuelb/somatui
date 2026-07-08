@@ -80,7 +80,7 @@ func (s *Server) playChannel(channelID string, userInitiated bool) (protocol.Pla
 	s.mu.Unlock()
 
 	if stateToSave != nil {
-		saveState(stateToSave)
+		s.saveState(stateToSave)
 	}
 
 	playlistURL := channels.SelectMP3PlaylistURL(playlists)
@@ -241,7 +241,7 @@ func (s *Server) SetVolume(v float64, mirrorToMPRIS bool) protocol.PlaybackState
 	snap := s.snapshotLocked()
 	s.mu.Unlock()
 
-	saveState(stateToSave)
+	s.saveState(stateToSave)
 	return snap
 }
 
