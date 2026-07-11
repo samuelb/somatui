@@ -49,8 +49,9 @@ const (
 // SomaFMChannelsURL is the URL for fetching channels - exported for testing.
 var SomaFMChannelsURL = "https://somafm.com/channels.json"
 
-// GetCacheFilePath returns the absolute path to the cache file.
-func GetCacheFilePath() (string, error) {
+// cacheFilePath resolves the absolute path of the cache file without
+// touching the filesystem.
+func cacheFilePath() (string, error) {
 	// Check XDG override first (works on all platforms, enables testing)
 	cacheDir := os.Getenv("XDG_CACHE_HOME")
 	if cacheDir == "" {
@@ -60,11 +61,39 @@ func GetCacheFilePath() (string, error) {
 			return "", fmt.Errorf("failed to get user cache directory: %w", err)
 		}
 	}
-	appCacheDir := filepath.Join(cacheDir, appCacheDirName)
-	if err := os.MkdirAll(appCacheDir, 0750); err != nil { // #nosec G703 -- path derived from os.UserCacheDir, not user input
+	return filepath.Join(cacheDir, appCacheDirName, cacheFileName), nil
+}
+
+// GetCacheFilePath returns the absolute path to the cache file, creating its
+// directory so the caller can write to it.
+func GetCacheFilePath() (string, error) {
+	path, err := cacheFilePath()
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0750); err != nil { // #nosec G703 -- path derived from os.UserCacheDir, not user input
 		return "", fmt.Errorf("failed to create app cache directory: %w", err)
 	}
-	return filepath.Join(appCacheDir, cacheFileName), nil
+	return path, nil
+}
+
+// PeekChannelsFromCache reads the cached channel data without side effects:
+// no directory is created and a corrupt cache stays in place. Shell
+// completion reads through this, since a Tab press must not modify anything.
+func PeekChannelsFromCache() (*Channels, error) {
+	cachePath, err := cacheFilePath()
+	if err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(cachePath) // #nosec G304 -- path derived from os.UserCacheDir, not user input
+	if err != nil {
+		return nil, fmt.Errorf("failed to read cache file: %w", err)
+	}
+	var channels Channels
+	if err := json.Unmarshal(data, &channels); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal cached data: %w", err)
+	}
+	return &channels, nil
 }
 
 // ReadChannelsFromCache attempts to read channel data from the local cache file.

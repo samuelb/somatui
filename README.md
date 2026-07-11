@@ -148,6 +148,39 @@ cd somad
 go build -o soma ./cmd/soma
 ```
 
+## Shell Completions
+
+Bash and Zsh completion scripts are available. If you installed soma via the
+Debian/Ubuntu package, AUR, or Nix, completions are installed automatically.
+
+For manual setup:
+
+**Bash:**
+```sh
+soma completion bash | sudo tee /usr/share/bash-completion/completions/soma
+```
+
+Or, to source it in your shell profile without installing system-wide:
+```sh
+echo 'source <(soma completion bash)' >> ~/.bashrc
+```
+
+**Zsh:**
+```sh
+soma completion zsh | sudo tee /usr/local/share/zsh/site-functions/_soma
+```
+
+After installing completions for Zsh, restart your shell or clear the completion cache:
+```sh
+rm ~/.zcompdump && exec zsh
+```
+
+Completions cover all subcommands, global connection flags, daemon flags, and
+`--json` options. The `soma play` and `soma favorite` commands also complete
+channel IDs from the locally cached channel catalog (in Zsh with the channel
+name shown alongside); completing never starts the daemon or touches the
+network.
+
 ## Usage
 
 Simply run:
@@ -174,6 +207,7 @@ background if one isn't running yet.
 | `soma volume [<0-100>\|+n\|-n]` | Show the volume, set it, or adjust it relative to the current value |
 | `soma daemon`              | Run the playback daemon in the foreground (`--no-tray` hides the tray icon; `--listen`, `--tls`, `--psk-file` serve [remote frontends](#remote-control-over-tcp)) |
 | `soma daemon stop`         | Shut down the playback daemon                            |
+| `soma completion <bash\|zsh>` | Print a completion script for the given shell           |
 | `soma --version`           | Print version information                                |
 
 Every client command also accepts the connection flags described under

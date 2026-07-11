@@ -92,6 +92,37 @@ func TestReadChannelsFromCache_CorruptJSON(t *testing.T) {
 	assert.Equal(t, "not json", string(backup))
 }
 
+func TestPeekChannelsFromCache(t *testing.T) {
+	SetCacheDir(t)
+
+	require.NoError(t, WriteChannelsToCache(&testChannelData))
+	loaded, err := PeekChannelsFromCache()
+	require.NoError(t, err)
+	assert.Equal(t, "groovesalad", loaded.Channels[0].ID)
+}
+
+// TestPeekChannelsFromCache_NoSideEffects pins the read-only contract shell
+// completion relies on: a Tab press must not create the cache directory or
+// move a corrupt cache aside.
+func TestPeekChannelsFromCache_NoSideEffects(t *testing.T) {
+	dir := SetCacheDir(t)
+	cacheDir := filepath.Join(dir, appCacheDirName)
+	cachePath := filepath.Join(cacheDir, cacheFileName)
+
+	channels, err := PeekChannelsFromCache()
+	assert.Error(t, err)
+	assert.Nil(t, channels)
+	assert.NoDirExists(t, cacheDir)
+
+	require.NoError(t, os.MkdirAll(cacheDir, 0755))                       // #nosec G301 // Test directory
+	require.NoError(t, os.WriteFile(cachePath, []byte("not json"), 0644)) // #nosec G306 // Test file
+	channels, err = PeekChannelsFromCache()
+	assert.Error(t, err)
+	assert.Nil(t, channels)
+	assert.FileExists(t, cachePath) // still in place, unlike ReadChannelsFromCache
+	assert.NoFileExists(t, cachePath+".corrupt")
+}
+
 func TestFetchChannelsFromNetwork(t *testing.T) {
 	securitytest.AllowTestHosts(t)
 	SetCacheDir(t)

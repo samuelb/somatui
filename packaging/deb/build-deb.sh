@@ -33,11 +33,15 @@ root="$tmpdir/${package}_${version}_${arch}"
 install -d \
   "$root/DEBIAN" \
   "$root/usr/bin" \
-  "$root/usr/share/doc/$package"
+  "$root/usr/share/doc/$package" \
+  "$root/usr/share/bash-completion/completions" \
+  "$root/usr/share/zsh/vendor-completions"
 
 install -m 0755 "$binary" "$root/usr/bin/$binname"
 install -m 0644 LICENSE "$root/usr/share/doc/$package/copyright"
 install -m 0644 README.md "$root/usr/share/doc/$package/README.md"
+install -m 0644 cmd/soma/completions/soma.bash "$root/usr/share/bash-completion/completions/$binname"
+install -m 0644 cmd/soma/completions/soma.zsh "$root/usr/share/zsh/vendor-completions/_$binname"
 
 installed_size="$(du -sk "$root/usr" | awk '{print $1}')"
 cat > "$root/DEBIAN/control" <<EOF

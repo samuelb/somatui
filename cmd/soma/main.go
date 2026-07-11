@@ -93,6 +93,14 @@ func main() {
 		return
 	}
 
+	// Completion scripts run `soma completion channels` on every Tab press;
+	// dispatch before the config load so a broken config cannot break
+	// completion. Like the word forms above, it ignores the connection flags.
+	if len(rest) > 0 && rest[0] == "completion" {
+		runCompletion(rest[1:])
+		return
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		fail("error loading config: %v", err)
@@ -199,6 +207,7 @@ func printUsage(w io.Writer) {
                                   requires a pre-shared key, --show-cert
                                   prints the TLS certificate fingerprint)
   soma daemon stop            shut down the playback server
+  soma completion <bash|zsh>  print a completion script for the given shell
   soma --version              print version information
   soma --help                 show this help
 

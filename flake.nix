@@ -28,7 +28,9 @@
 
             vendorHash = null;
 
-            nativeBuildInputs = pkgs.lib.optionals pkgs.stdenv.isLinux [
+            nativeBuildInputs = [
+              pkgs.installShellFiles
+            ] ++ pkgs.lib.optionals pkgs.stdenv.isLinux [
               pkgs.pkg-config
             ];
             buildInputs = pkgs.lib.optionals pkgs.stdenv.isLinux [
@@ -43,6 +45,12 @@
               "-X main.commit=${self.shortRev or "dirty"}"
               "-X main.date=unknown"
             ];
+
+            postInstall = ''
+              installShellCompletion --cmd soma \
+                --bash cmd/soma/completions/soma.bash \
+                --zsh cmd/soma/completions/soma.zsh
+            '';
 
             meta = {
               description = "A client for streaming SomaFM radio channels";
