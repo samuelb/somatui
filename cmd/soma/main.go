@@ -290,6 +290,8 @@ func runServer(args []string) {
 		"PEM private key belonging to --tls-cert")
 	pskFile := fs.String("psk-file", str(cfg.Server.PSKFile),
 		"file holding the pre-shared key TCP clients must authenticate with")
+	insecure := fs.Bool("insecure", cfg.Server.Insecure != nil && *cfg.Server.Insecure,
+		"serve a non-loopback --listen address even without TLS and a PSK")
 	showCert := fs.Bool("show-cert", false,
 		"print the TLS certificate path and fingerprint, then exit")
 	_ = fs.Parse(args)
@@ -342,7 +344,7 @@ func runServer(args []string) {
 
 	listeners := []net.Listener{ln}
 	if *listen != "" {
-		tcpLn, err := listenTCP(*listen, tlsEnabled, certPath, keyPath, psk)
+		tcpLn, err := listenTCP(*listen, tlsEnabled, certPath, keyPath, psk, *insecure)
 		if err != nil {
 			cleanup()
 			log.Fatalf("error starting the TCP listener: %v", err)
@@ -454,10 +456,44 @@ func ensureCertPair(certPath, keyPath, listenAddr string) (string, string, error
 	return certPath, keyPath, nil
 }
 
+// checkTCPSecurity rejects a non-loopback TCP listener that lacks TLS or a
+// PSK, unless the user explicitly opted out with --insecure. Loopback binds
+// only warn (in listenTCP): the machine boundary already limits exposure,
+// like the Unix socket.
+func checkTCPSecurity(addr string, useTLS bool, psk string, insecure bool) error {
+	if insecure || isLoopbackAddr(addr) {
+		return nil
+	}
+	if psk == "" {
+		return fmt.Errorf("refusing to serve %s without authentication: anyone who can reach the port would control playback and could shut the daemon down; set a PSK (--psk-file or server.psk) or pass --insecure to serve it open", addr)
+	}
+	if !useTLS {
+		return fmt.Errorf("refusing to serve %s with a PSK but no TLS: without encryption an attacker on the network can hijack authenticated connections; pass --tls or --insecure", addr)
+	}
+	return nil
+}
+
+// isLoopbackAddr reports whether a listen address can only be reached from
+// this machine. An empty host (":5454") binds all interfaces.
+func isLoopbackAddr(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return false
+	}
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
 // listenTCP binds the remote-frontend listener, wrapping it in TLS when
 // enabled, and logs what protections it runs with — including prominent
 // warnings for the combinations that leave it open.
-func listenTCP(addr string, useTLS bool, certPath, keyPath, psk string) (net.Listener, error) {
+func listenTCP(addr string, useTLS bool, certPath, keyPath, psk string, insecure bool) (net.Listener, error) {
+	if err := checkTCPSecurity(addr, useTLS, psk, insecure); err != nil {
+		return nil, err
+	}
 	tcpLn, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", addr)
 	if err != nil {
 		return nil, err

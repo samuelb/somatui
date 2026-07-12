@@ -56,6 +56,9 @@ type ServerConfig struct {
 	// At most one may be set. The Unix socket never requires it.
 	PSK     *string `yaml:"psk"`
 	PSKFile *string `yaml:"psk_file"`
+	// Insecure allows a non-loopback TCP listener without TLS and a PSK,
+	// which the server otherwise refuses to start. Same as --insecure.
+	Insecure *bool `yaml:"insecure"`
 }
 
 // ClientConfig configures how the TUI and CLI reach the server. It mirrors
@@ -230,6 +233,10 @@ const templateFormat = `# Soma configuration file.
 #  #   psk_file: /path/to/psk
 #  # (or the --psk-file flag); psk and psk_file are mutually exclusive.
 #  psk: "change-me"
+#
+#  # A non-loopback "listen" normally requires both TLS and a PSK; set this
+#  # to serve it unprotected anyway. Same as the --insecure flag.
+#  insecure: false
 #
 #client:
 #  # Connect the TUI and CLI to a remote soma daemon instead of the local

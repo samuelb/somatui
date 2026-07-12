@@ -86,7 +86,7 @@ _soma() {
         ;;
     daemon)
         COMPREPLY=($(compgen -W "stop --idle-timeout --no-tray --listen --tls
-            --tls-cert --tls-key --psk-file --show-cert" -- "$cur"))
+            --tls-cert --tls-key --psk-file --insecure --show-cert" -- "$cur"))
         ;;
     completion)
         COMPREPLY=($(compgen -W "bash zsh" -- "$cur"))

@@ -277,10 +277,12 @@ That works with every command (`soma --server ... play groovesalad`,
 can trust the certificate file itself (`--tls-ca`, after copying it over) or,
 with a real CA-issued certificate, plain `--tls` using the system trust store.
 
-TLS and the PSK are independent and both optional, but running a TCP listener
-without them means anyone on the network can watch and control your radio —
-the daemon logs a prominent warning in that case. TLS + PSK is the
-recommended setup for anything beyond a trusted LAN.
+A listener reachable from other machines requires both TLS and a PSK — anyone
+who can reach an unprotected port could control your radio (and shut the
+daemon down), so the daemon refuses to start without them. To run one open
+anyway, e.g. on a trusted isolated network, pass `--insecure` (or set
+`server.insecure` in the config file). Listeners bound to localhost only log
+a warning, since they are no more exposed than the Unix socket.
 
 Two things work differently with a remote server: the client never
 auto-starts one (start `soma daemon` on the server yourself, e.g. under a
