@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -11,7 +12,10 @@ import (
 	"somad/internal/security"
 )
 
-const plsFilePrefix = "File1="
+// maxPlaylistBytes caps how much of a playlist response is read. Playlists
+// are a few hundred bytes; the URL can be attacker-influenced via redirects,
+// so an unbounded read would be a memory hazard.
+const maxPlaylistBytes = 1 << 20 // 1 MiB
 
 // GetStreamURLFromPlaylist fetches a playlist file from a URL, parses it,
 // and returns the first stream URL found within the playlist.
@@ -37,21 +41,56 @@ func GetStreamURLFromPlaylist(playlistURL, userAgent string) (string, error) {
 		return "", fmt.Errorf("unexpected status code %d for playlist %s", resp.StatusCode, playlistURL)
 	}
 
-	// Scan the playlist file line by line to find the stream URL
-	scanner := bufio.NewScanner(resp.Body)
-	for scanner.Scan() {
-		line := scanner.Text()
-		// In .pls files, the stream URL is typically on a line starting with "File1="
-		if strings.HasPrefix(line, plsFilePrefix) {
-			return strings.TrimPrefix(line, plsFilePrefix), nil
-		}
-	}
-
-	// Check for any errors during scanning
-	if err := scanner.Err(); err != nil {
+	url, err := parseFirstStreamURL(io.LimitReader(resp.Body, maxPlaylistBytes))
+	if err != nil {
 		return "", fmt.Errorf("error reading playlist body from %s: %w", playlistURL, err)
 	}
+	if url == "" {
+		return "", fmt.Errorf("no stream URL found in playlist %s", playlistURL)
+	}
+	return url, nil
+}
 
-	// If no stream URL was found in the playlist
-	return "", fmt.Errorf("no stream URL found in playlist %s", playlistURL)
+// parseFirstStreamURL scans .pls content for the first FileN entry and
+// returns its URL, or "" when none is found. Real-world playlists are not
+// always spec-exact, so keys match case-insensitively and whitespace around
+// keys, values, and the "=" is tolerated.
+func parseFirstStreamURL(r io.Reader) (string, error) {
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		key, value, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		if isFileKey(strings.TrimSpace(key)) {
+			if url := strings.TrimSpace(value); url != "" {
+				return url, nil
+			}
+		}
+	}
+	return "", scanner.Err()
+}
+
+// isFileKey reports whether a .pls key names a stream entry: "file" followed
+// by digits, in any case.
+func isFileKey(key string) bool {
+	rest, ok := cutPrefixFold(key, "file")
+	if !ok || rest == "" {
+		return false
+	}
+	for _, r := range rest {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// cutPrefixFold is strings.CutPrefix with ASCII case-insensitive matching.
+func cutPrefixFold(s, prefix string) (string, bool) {
+	if len(s) < len(prefix) || !strings.EqualFold(s[:len(prefix)], prefix) {
+		return s, false
+	}
+	return s[len(prefix):], true
 }

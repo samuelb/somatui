@@ -61,6 +61,26 @@ Version=2`,
 			wantErr:    true,
 		},
 		{
+			// Real-world playlists are not always spec-exact.
+			name: "lenient parsing: case, whitespace, and File2 without File1",
+			content: "[playlist]\r\n" +
+				"NumberOfEntries=2\r\n" +
+				"  FILE2 = http://ice2.somafm.com/groovesalad-128-mp3  \r\n" +
+				"Title2=Groove Salad (backup)\r\n",
+			statusCode: http.StatusOK,
+			wantURL:    "http://ice2.somafm.com/groovesalad-128-mp3",
+			wantErr:    false,
+		},
+		{
+			name: "Filename key is not a stream entry",
+			content: `[playlist]
+Filename=not-a-stream
+Version=2`,
+			statusCode: http.StatusOK,
+			wantURL:    "",
+			wantErr:    true,
+		},
+		{
 			name:       "server error",
 			content:    "",
 			statusCode: http.StatusInternalServerError,
