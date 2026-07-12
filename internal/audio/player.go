@@ -89,7 +89,14 @@ type AudioPlayer struct {
 	volume  float64  // target volume in [0, 1], guarded by mu
 }
 
-// NewPlayer initializes a new audio player with a default sample rate and channel count.
+// audioReadyTimeout bounds how long NewPlayer waits for the audio device.
+// Without it, a hung audio backend (a stuck ALSA daemon, a broken device)
+// would block server startup forever instead of failing with a message.
+const audioReadyTimeout = 15 * time.Second
+
+// NewPlayer initializes a new audio player with a default sample rate and
+// channel count. The underlying oto context is process-global and cannot be
+// released, so create at most one AudioPlayer per process.
 func NewPlayer(userAgent string) (*AudioPlayer, error) {
 	// Initialize oto context with standard audio parameters
 	op := &oto.NewContextOptions{
@@ -102,7 +109,11 @@ func NewPlayer(userAgent string) (*AudioPlayer, error) {
 		return nil, fmt.Errorf("failed to create oto context: %w", err)
 	}
 	// Wait for the audio context to be ready
-	<-ready
+	select {
+	case <-ready:
+	case <-time.After(audioReadyTimeout):
+		return nil, fmt.Errorf("audio device not ready after %s", audioReadyTimeout)
+	}
 
 	return &AudioPlayer{
 		ctx:       ctx,
