@@ -7,6 +7,9 @@ var mp3QualityRank = map[string]int{"highest": 0, "high": 1, "low": 2}
 // channel's playlists (highest > high > low > unknown), or "" if none.
 func SelectMP3PlaylistURL(playlists []Playlist) string {
 	bestURL := ""
+	// The seed must exceed the unknown-quality rank below, or a channel
+	// whose playlists all have unrecognized quality labels would select
+	// nothing at all instead of falling back to its first entry.
 	bestRank := len(mp3QualityRank) + 1
 	for _, playlist := range playlists {
 		if playlist.Format != "mp3" {

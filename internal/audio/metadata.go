@@ -88,7 +88,10 @@ func parseICYMetadata(metaStr string) (TrackInfo, error) {
 	// ICY metadata format: StreamTitle='Title';StreamUrl='';
 	// The title itself may contain semicolons, so it is delimited by the
 	// closing "';" sequence rather than a bare ";" — splitting on ";" would
-	// truncate titles like "Artist - A; B".
+	// truncate titles like "Artist - A; B". This is a known ambiguity of the
+	// format itself: ICY provides no escaping, so a title containing a
+	// literal "';" (say "Rock'; Roll") is truncated at that point. Nothing
+	// a parser can do recovers the intent.
 	const opener = "StreamTitle='"
 	start := strings.Index(metaStr, opener)
 	if start < 0 {
