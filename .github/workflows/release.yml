@@ -209,7 +209,7 @@ jobs:
         if: inputs.dry_run == false
         uses: actions/checkout@v7
         with:
-          repository: samuelb/homebrew-somad
+          repository: samuelb/homebrew-tap
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           path: tap
 

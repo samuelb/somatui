@@ -48,7 +48,7 @@ Linux and macOS — other platforms are not supported and may not work.
 ### Homebrew (macOS and Linux)
 
 ```sh
-brew tap samuelb/somad
+brew tap samuelb/tap
 brew install somad
 ```
 
@@ -57,7 +57,7 @@ so no compiler is required. Upgrade later with `brew upgrade somad`.
 
 Recent versions of Homebrew ask you to explicitly trust a third-party tap before
 installing from it. If you see an "untrusted tap" error, run
-`brew trust samuelb/somad` and try again.
+`brew trust samuelb/tap` and try again.
 
 ### Debian/Ubuntu
 
