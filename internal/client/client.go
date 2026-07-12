@@ -108,7 +108,12 @@ func DialEndpoint(ep Endpoint) (*Client, error) {
 		events:  make(chan any, 32),
 	}
 	go c.readLoop()
-	if ep.PSK != "" && !ep.IsLocal() {
+	// A configured PSK always authenticates, regardless of transport: the
+	// server is the single source of truth on whether auth is required (it
+	// exempts the Unix socket), and it accepts a voluntary handshake even
+	// where it is not. Skipping it here based on the transport would let an
+	// endpoint that asks for auth silently connect without it.
+	if ep.PSK != "" {
 		if err := c.authenticate(ep.PSK); err != nil {
 			_ = c.Close()
 			return nil, fmt.Errorf("authenticating with %s: %w", ep, err)

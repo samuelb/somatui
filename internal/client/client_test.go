@@ -2,10 +2,12 @@ package client
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -166,6 +168,54 @@ func TestClient_EventsChannelClosesOnDisconnect(t *testing.T) {
 
 	_, err = c.Status()
 	assert.ErrorIs(t, err, ErrDisconnected)
+}
+
+func TestDialEndpoint_AuthenticatesWithPSK(t *testing.T) {
+	path := testSocketPath(t)
+	const psk = "sesame"
+
+	// The fake server scans each connection on its own goroutine, so the
+	// last-issued nonce is shared atomically.
+	var lastNonce atomic.Pointer[[]byte]
+	startFakeServer(t, path, func(req protocol.Request, send func(v any)) {
+		respond := func(result any) {
+			raw, _ := json.Marshal(result)
+			send(protocol.Response{ID: req.ID, Result: raw})
+		}
+		switch req.Method {
+		case protocol.MethodAuthChallenge:
+			nonce, err := protocol.NewAuthNonce()
+			require.NoError(t, err)
+			lastNonce.Store(&nonce)
+			respond(protocol.AuthChallengeResult{Nonce: base64.StdEncoding.EncodeToString(nonce)})
+		case protocol.MethodAuth:
+			var p protocol.AuthParams
+			require.NoError(t, json.Unmarshal(req.Params, &p))
+			mac, err := base64.StdEncoding.DecodeString(p.MAC)
+			require.NoError(t, err)
+			nonce := *lastNonce.Load()
+			if !protocol.VerifyAuthMAC(psk, nonce, mac) {
+				send(protocol.Response{ID: req.ID, Error: "authentication failed: pre-shared key mismatch"})
+				return
+			}
+			respond(struct{}{})
+		case protocol.MethodHello:
+			respond(protocol.HelloResult{ServerVersion: "dev", ProtocolVersion: protocol.Version})
+		}
+	})
+
+	// The right key authenticates; transport does not matter — a PSK on the
+	// endpoint always means "authenticate".
+	c, err := DialEndpoint(Endpoint{Network: "unix", Address: path, PSK: psk})
+	require.NoError(t, err)
+	defer func() { _ = c.Close() }()
+	_, err = c.Hello("dev")
+	require.NoError(t, err)
+
+	// The wrong key must fail the dial, not silently connect.
+	_, err = DialEndpoint(Endpoint{Network: "unix", Address: path, PSK: "wrong"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "pre-shared key mismatch")
 }
 
 func TestClient_CallTimesOutWithoutResponse(t *testing.T) {
