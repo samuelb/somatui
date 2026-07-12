@@ -32,10 +32,11 @@ type Client struct {
 	nc      net.Conn
 	writeMu sync.Mutex
 
-	mu      sync.Mutex
-	nextID  int64
-	pending map[int64]chan protocol.Response
-	closed  bool
+	mu        sync.Mutex
+	nextID    int64
+	pending   map[int64]chan protocol.Response
+	closed    bool
+	closeOnce sync.Once
 
 	// events carries decoded protocol.PlaybackState and
 	// protocol.ChannelsPayload values; closed on disconnect.
@@ -147,8 +148,12 @@ func (c *Client) Events() <-chan any {
 }
 
 // Close tears down the connection; the events channel closes as a result.
+// Safe to call multiple times: repeat calls return nil instead of the
+// net-package's "use of closed connection" error.
 func (c *Client) Close() error {
-	return c.nc.Close()
+	err := error(nil)
+	c.closeOnce.Do(func() { err = c.nc.Close() })
+	return err
 }
 
 // readLoop demuxes server lines into pending responses and events.
@@ -182,7 +187,7 @@ func (c *Client) readLoop() {
 		close(ch)
 	}
 	close(c.events)
-	_ = c.nc.Close()
+	_ = c.Close()
 }
 
 // dispatchEvent decodes and queues one event, dropping the oldest queued

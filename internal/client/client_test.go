@@ -170,6 +170,17 @@ func TestClient_EventsChannelClosesOnDisconnect(t *testing.T) {
 	assert.ErrorIs(t, err, ErrDisconnected)
 }
 
+func TestClient_CloseIsIdempotent(t *testing.T) {
+	path := testSocketPath(t)
+	startFakeServer(t, path, defaultHandler("dev"))
+
+	c, err := Dial(path)
+	require.NoError(t, err)
+
+	require.NoError(t, c.Close())
+	assert.NoError(t, c.Close(), "a repeat Close must not report 'use of closed connection'")
+}
+
 func TestDialEndpoint_AuthenticatesWithPSK(t *testing.T) {
 	path := testSocketPath(t)
 	const psk = "sesame"
