@@ -45,11 +45,36 @@ type Player interface {
 	Volume() float64
 }
 
+// outputPlayer and audioContext are the parts of oto used by AudioPlayer.
+// Keeping this boundary small lets the device lifecycle be tested without
+// requiring audio hardware.
+type outputPlayer interface {
+	Play()
+	Pause()
+	SetVolume(float64)
+	Volume() float64
+}
+
+type audioContext interface {
+	NewPlayer(io.Reader) outputPlayer
+	Suspend() error
+	Resume() error
+	Err() error
+}
+
+type otoContext struct {
+	*oto.Context
+}
+
+func (c *otoContext) NewPlayer(r io.Reader) outputPlayer {
+	return c.Context.NewPlayer(r)
+}
+
 // session represents a single playback lifecycle: one stream, one decoder,
 // one oto player. After creation, only its managing goroutine (runSession)
 // touches the oto player, which keeps volume changes free of data races.
 type session struct {
-	player   *oto.Player
+	player   outputPlayer
 	stream   io.Closer
 	cancel   context.CancelFunc // aborts the HTTP fetch goroutine
 	stop     chan struct{}      // closed to request fade-out and teardown
@@ -78,50 +103,94 @@ func (s *session) setVolume(v float64) {
 
 // AudioPlayer manages the audio playback for SomaFM streams.
 type AudioPlayer struct {
-	ctx       *oto.Context
 	userAgent string
 	errChan   chan error
 	trackChan chan TrackInfo
 
-	mu      sync.Mutex
-	current *session // the active session, guarded by mu
-	playGen uint64   // bumped by every Play/Stop so stale connects never commit
-	volume  float64  // target volume in [0, 1], guarded by mu
+	contextOnce     sync.Once
+	contextErr      error // context creation errors are permanent in oto
+	ctx             audioContext
+	contextReady    <-chan struct{}
+	lateSuspendOnce sync.Once
+	newContext      func() (audioContext, <-chan struct{}, error)
+	// deviceMu must be acquired before mu when both are needed.
+	deviceMu sync.Mutex // guards deviceSuspended and context/session transitions
+	// deviceSuspended is valid after ctx is initialized and guarded by deviceMu.
+	deviceSuspended bool
+
+	mu       sync.Mutex
+	current  *session // the active session, guarded by mu
+	sessions int      // committed sessions still fading or playing, guarded by mu
+	playGen  uint64   // bumped by every Play/Stop so stale connects never commit
+	volume   float64  // target volume in [0, 1], guarded by mu
 }
 
-// audioReadyTimeout bounds how long NewPlayer waits for the audio device.
+// audioReadyTimeout bounds how long the first Play waits for the audio device.
 // Without it, a hung audio backend (a stuck ALSA daemon, a broken device)
-// would block server startup forever instead of failing with a message.
-const audioReadyTimeout = 15 * time.Second
+// would block playback forever instead of failing with a message.
+var audioReadyTimeout = 15 * time.Second
 
-// NewPlayer initializes a new audio player with a default sample rate and
-// channel count. The underlying oto context is process-global and cannot be
-// released, so create at most one AudioPlayer per process.
+// NewPlayer initializes an audio player without opening the audio device. The
+// process-global oto context is created lazily by the first Play call.
 func NewPlayer(userAgent string) (*AudioPlayer, error) {
-	// Initialize oto context with standard audio parameters
-	op := &oto.NewContextOptions{
-		SampleRate:   sampleRate,
-		ChannelCount: 2,
-		Format:       oto.FormatSignedInt16LE,
-	}
-	ctx, ready, err := oto.NewContext(op)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create oto context: %w", err)
-	}
-	// Wait for the audio context to be ready
-	select {
-	case <-ready:
-	case <-time.After(audioReadyTimeout):
-		return nil, fmt.Errorf("audio device not ready after %s", audioReadyTimeout)
-	}
-
 	return &AudioPlayer{
-		ctx:       ctx,
 		userAgent: userAgent,
 		errChan:   make(chan error, 2),
 		trackChan: make(chan TrackInfo, 1),
 		volume:    1,
+		newContext: func() (audioContext, <-chan struct{}, error) {
+			op := &oto.NewContextOptions{
+				SampleRate:   sampleRate,
+				ChannelCount: 2,
+				Format:       oto.FormatSignedInt16LE,
+			}
+			ctx, ready, err := oto.NewContext(op)
+			if err != nil {
+				return nil, nil, err
+			}
+			return &otoContext{Context: ctx}, ready, nil
+		},
 	}, nil
+}
+
+// ensureContext creates the process-global oto context once and waits until the
+// device is ready. A readiness timeout is not sticky: oto initialization can
+// finish later, and a subsequent Play can then use the recovered device.
+func (p *AudioPlayer) ensureContext() error {
+	p.contextOnce.Do(func() {
+		ctx, ready, err := p.newContext()
+		if err != nil {
+			p.contextErr = fmt.Errorf("failed to create oto context: %w", err)
+			return
+		}
+		p.ctx = ctx
+		p.contextReady = ready
+	})
+	if p.contextErr != nil {
+		return p.contextErr
+	}
+
+	select {
+	case <-p.contextReady:
+	case <-time.After(audioReadyTimeout):
+		// NewContext has no cancellation or Close operation. If it becomes
+		// ready later, stop its render loop unless another Play committed first.
+		p.lateSuspendOnce.Do(func() {
+			go func() {
+				<-p.contextReady
+				p.deviceMu.Lock()
+				p.mu.Lock()
+				p.suspendIfIdleLocked()
+				p.mu.Unlock()
+				p.deviceMu.Unlock()
+			}()
+		})
+		return fmt.Errorf("audio device not ready after %s", audioReadyTimeout)
+	}
+	if err := p.ctx.Err(); err != nil {
+		return fmt.Errorf("failed to initialize audio device: %w", err)
+	}
+	return nil
 }
 
 // Play starts streaming and playing audio from the given URL. It blocks until
@@ -161,15 +230,38 @@ func (p *AudioPlayer) Play(url string) error {
 	if decoder.SampleRate() != sampleRate {
 		decodedStream = newResampler(decoder, decoder.SampleRate(), sampleRate)
 	}
+	p.mu.Lock()
+	superseded := gen != p.playGen
+	p.mu.Unlock()
+	if superseded {
+		discard()
+		return ErrSuperseded
+	}
+	if err := p.ensureContext(); err != nil {
+		discard()
+		return err
+	}
 
 	// Commit the new session and stop the old one (which fades out on its own
 	// goroutine, briefly crossfading with the new stream for gapless switching).
 	// If a newer Play/Stop arrived while we were connecting, back out instead.
+	p.deviceMu.Lock()
 	p.mu.Lock()
 	if gen != p.playGen {
+		p.suspendIfIdleLocked()
 		p.mu.Unlock()
+		p.deviceMu.Unlock()
 		discard()
 		return ErrSuperseded
+	}
+	if p.deviceSuspended {
+		if err := p.ctx.Resume(); err != nil {
+			p.mu.Unlock()
+			p.deviceMu.Unlock()
+			discard()
+			return fmt.Errorf("failed to resume audio device: %w", err)
+		}
+		p.deviceSuspended = false
 	}
 
 	player := p.ctx.NewPlayer(decodedStream)
@@ -185,7 +277,9 @@ func (p *AudioPlayer) Play(url string) error {
 	}
 	old := p.current
 	p.current = s
+	p.sessions++
 	p.mu.Unlock()
+	p.deviceMu.Unlock()
 
 	// Titles buffered from the previous channel must not leak into this one.
 	p.drainTrackUpdates()
@@ -413,6 +507,24 @@ func (p *AudioPlayer) fadeOutAndClose(s *session) {
 	// stuck in a pipe write.
 	s.cancel()
 	_ = s.stream.Close()
+
+	p.deviceMu.Lock()
+	p.mu.Lock()
+	p.sessions--
+	p.suspendIfIdleLocked()
+	p.mu.Unlock()
+	p.deviceMu.Unlock()
+}
+
+// suspendIfIdleLocked stops the device render loop when no session is active.
+// Both deviceMu and mu must be held so a concurrent Play cannot resume and
+// commit a new session between the idle check and Suspend.
+func (p *AudioPlayer) suspendIfIdleLocked() {
+	if p.current == nil && p.sessions == 0 && p.ctx != nil && !p.deviceSuspended {
+		if err := p.ctx.Suspend(); err == nil {
+			p.deviceSuspended = true
+		}
+	}
 }
 
 // Stop halts the current audio playback and cancels any Play call that is

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -17,15 +18,227 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// newTestPlayer returns an AudioPlayer without an oto context. This is enough to
-// exercise fetchStream and reportError, which never touch the audio device — the
-// full Play() path requires hardware and is not testable in CI.
+// newTestPlayer returns a bare AudioPlayer without an oto context. This is
+// enough for tests that exercise methods which never touch the audio device.
 func newTestPlayer() *AudioPlayer {
 	return &AudioPlayer{
 		userAgent: "soma/test",
 		errChan:   make(chan error, 2),
 		trackChan: make(chan TrackInfo, 1),
 	}
+}
+
+type fakeOutputPlayer struct {
+	mu     sync.Mutex
+	volume float64
+	paused func()
+}
+
+func (p *fakeOutputPlayer) Play() {}
+
+func (p *fakeOutputPlayer) Pause() {
+	if p.paused != nil {
+		p.paused()
+	}
+}
+
+func (p *fakeOutputPlayer) SetVolume(v float64) {
+	p.mu.Lock()
+	p.volume = v
+	p.mu.Unlock()
+}
+
+func (p *fakeOutputPlayer) Volume() float64 {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.volume
+}
+
+type fakeAudioContext struct {
+	suspends atomic.Int32
+	resumes  atomic.Int32
+	players  atomic.Int32
+	pauses   atomic.Int32
+
+	mu        sync.Mutex
+	resumeErr error
+}
+
+func (c *fakeAudioContext) NewPlayer(io.Reader) outputPlayer {
+	c.players.Add(1)
+	return &fakeOutputPlayer{
+		volume: 1,
+		paused: func() { c.pauses.Add(1) },
+	}
+}
+
+func (c *fakeAudioContext) Suspend() error {
+	c.suspends.Add(1)
+	return nil
+}
+
+func (c *fakeAudioContext) Resume() error {
+	c.resumes.Add(1)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.resumeErr
+}
+
+func (c *fakeAudioContext) Err() error { return nil }
+
+func (c *fakeAudioContext) setResumeError(err error) {
+	c.mu.Lock()
+	c.resumeErr = err
+	c.mu.Unlock()
+}
+
+func newLifecycleTestPlayer(t *testing.T) (*AudioPlayer, *fakeAudioContext, *atomic.Int32) {
+	t.Helper()
+	p, err := NewPlayer("soma/test")
+	require.NoError(t, err)
+	ctx := &fakeAudioContext{}
+	created := &atomic.Int32{}
+	ready := make(chan struct{})
+	close(ready)
+	p.newContext = func() (audioContext, <-chan struct{}, error) {
+		created.Add(1)
+		return ctx, ready, nil
+	}
+	return p, ctx, created
+}
+
+func newStreamingTestServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	securitytest.AllowTestHosts(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(silentMP3Frames(30))
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		<-r.Context().Done()
+	}))
+	t.Cleanup(server.Close)
+	return server
+}
+
+func TestNewPlayer_DoesNotOpenAudioDevice(t *testing.T) {
+	_, _, created := newLifecycleTestPlayer(t)
+	assert.Zero(t, created.Load())
+}
+
+func TestPlayStop_ResumesAndSuspendsAudioDevice(t *testing.T) {
+	p, ctx, created := newLifecycleTestPlayer(t)
+	server := newStreamingTestServer(t)
+	t.Cleanup(p.Stop)
+
+	require.NoError(t, p.Play(server.URL))
+	assert.EqualValues(t, 1, created.Load())
+	assert.EqualValues(t, 1, ctx.players.Load())
+	assert.Zero(t, ctx.resumes.Load(), "a new context is already active")
+	assert.Zero(t, ctx.suspends.Load())
+
+	p.Stop()
+	require.Eventually(t, func() bool {
+		return ctx.suspends.Load() == 1
+	}, time.Second, 10*time.Millisecond)
+
+	require.NoError(t, p.Play(server.URL))
+	assert.EqualValues(t, 1, ctx.resumes.Load())
+	assert.EqualValues(t, 2, ctx.players.Load())
+	p.Stop()
+	require.Eventually(t, func() bool {
+		return ctx.suspends.Load() == 2
+	}, time.Second, 10*time.Millisecond)
+}
+
+func TestEnsureContext_RecoversAfterReadyTimeout(t *testing.T) {
+	p, err := NewPlayer("soma/test")
+	require.NoError(t, err)
+	ctx := &fakeAudioContext{}
+	ready := make(chan struct{})
+	p.newContext = func() (audioContext, <-chan struct{}, error) {
+		return ctx, ready, nil
+	}
+	originalTimeout := audioReadyTimeout
+	audioReadyTimeout = 20 * time.Millisecond
+	t.Cleanup(func() { audioReadyTimeout = originalTimeout })
+
+	err = p.ensureContext()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "audio device not ready")
+
+	close(ready)
+	require.Eventually(t, func() bool {
+		return ctx.suspends.Load() == 1
+	}, time.Second, 10*time.Millisecond)
+	require.NoError(t, p.ensureContext())
+}
+
+func TestPlay_ResumeErrorDoesNotCommitSession(t *testing.T) {
+	p, ctx, _ := newLifecycleTestPlayer(t)
+	server := newStreamingTestServer(t)
+	t.Cleanup(p.Stop)
+
+	require.NoError(t, p.Play(server.URL))
+	p.Stop()
+	require.Eventually(t, func() bool {
+		return ctx.suspends.Load() == 1
+	}, time.Second, 10*time.Millisecond)
+
+	ctx.setResumeError(errors.New("resume failed"))
+	err := p.Play(server.URL)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to resume audio device")
+	assert.EqualValues(t, 1, ctx.players.Load())
+	p.mu.Lock()
+	assert.Nil(t, p.current)
+	assert.Zero(t, p.sessions)
+	p.mu.Unlock()
+
+	ctx.setResumeError(nil)
+	require.NoError(t, p.Play(server.URL))
+}
+
+func TestPlaySwitch_DoesNotSuspendReplacementSession(t *testing.T) {
+	p, ctx, _ := newLifecycleTestPlayer(t)
+	server := newStreamingTestServer(t)
+	t.Cleanup(p.Stop)
+
+	require.NoError(t, p.Play(server.URL))
+	require.NoError(t, p.Play(server.URL))
+	require.Eventually(t, func() bool {
+		return ctx.pauses.Load() == 1
+	}, time.Second, 10*time.Millisecond)
+
+	// The old session has completed teardown. It must see the new current
+	// session and leave the context running.
+	assert.Zero(t, ctx.suspends.Load())
+	assert.Zero(t, ctx.resumes.Load())
+
+	p.Stop()
+	require.Eventually(t, func() bool {
+		return ctx.pauses.Load() == 2 && ctx.suspends.Load() == 1
+	}, time.Second, 10*time.Millisecond)
+}
+
+func TestStopDuringCrossfade_WaitsForBothSessionsBeforeSuspend(t *testing.T) {
+	p, ctx, _ := newLifecycleTestPlayer(t)
+	server := newStreamingTestServer(t)
+	t.Cleanup(p.Stop)
+
+	require.NoError(t, p.Play(server.URL))
+	require.NoError(t, p.Play(server.URL))
+	p.Stop()
+
+	require.Eventually(t, func() bool {
+		return ctx.pauses.Load() >= 1
+	}, time.Second, 10*time.Millisecond)
+	if ctx.pauses.Load() == 1 {
+		assert.Zero(t, ctx.suspends.Load(), "one session is still draining")
+	}
+	require.Eventually(t, func() bool {
+		return ctx.pauses.Load() == 2 && ctx.suspends.Load() == 1
+	}, time.Second, 10*time.Millisecond)
 }
 
 func TestErrors_ReturnsChannel(t *testing.T) {
