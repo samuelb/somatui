@@ -437,14 +437,18 @@ To install lefthook itself, see [installation instructions](https://github.com/e
 go install github.com/evilmartians/lefthook@latest
 ```
 
-## Release Dry Run
+## Releasing
 
-To test the full release pipeline without publishing anything, run the `Release`
-workflow manually in GitHub Actions and leave `dry_run` set to `true`. The dry
-run builds all release binaries and Debian packages, generates checksums, renders
-the Homebrew formula and AUR files, and uploads the generated release assets as
-workflow artifacts. It does not create a Git tag, create a GitHub Release, update
-the Homebrew tap, or push to AUR.
+Releases are cut by running the `Release` workflow manually in GitHub Actions.
+The next version is derived from the conventional commits since the last release
+(a breaking change bumps major, `feat:` bumps minor, anything else patch); the
+`bump` input can force a specific major/minor/patch bump instead.
+
+To test the full release pipeline without publishing anything, leave `dry_run`
+set to `true`. The dry run builds all release binaries, `.deb`/`.rpm` packages
+and the pinned `PKGBUILD`, generates checksums, renders the Homebrew formula,
+and uploads the generated release assets as workflow artifacts. It does not push
+a version bump, create a Git tag or GitHub Release, or update the Homebrew tap.
 
 ## License
 

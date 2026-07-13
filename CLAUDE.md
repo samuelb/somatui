@@ -27,6 +27,9 @@ Write commit subjects as Conventional Commits — `feat:`, `fix:`, `perf:`,
 `refactor:`, `docs:`, `test:`, `chore:`, `ci:`, `build:` (with `!` for breaking
 changes). Release notes are generated from them by git-cliff (`cliff.toml`);
 unprefixed commits still appear, but only under a generic "Other" heading.
+The manually dispatched Release workflow also derives the next version from
+them via `git-cliff --bump` (breaking → major, `feat:` → minor, else patch;
+overridable with its `bump` input), so prefixes affect version numbers too.
 
 ## Architecture
 
