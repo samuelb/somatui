@@ -92,7 +92,7 @@ func (s *Server) serveConn(nc net.Conn) {
 			}
 			c.respond(req.ID, protocol.AuthChallengeResult{Nonce: base64.StdEncoding.EncodeToString(nonce)})
 		case protocol.MethodAuth:
-			ok := c.handleAuth(req, nonce)
+			ok := c.verifyAuth(req, nonce)
 			nonce = nil // single-use: a new attempt needs a new challenge
 			if !ok {
 				// Slow down brute-force attempts before dropping the
@@ -107,6 +107,9 @@ func (s *Server) serveConn(nc net.Conn) {
 				}
 				registered = true
 			}
+			// Respond only after registering: a client that acts on this
+			// response must already be receiving broadcasts.
+			c.respond(req.ID, struct{}{})
 		case protocol.MethodHello:
 			if !authed {
 				c.respondError(req.ID, errors.New("authentication required: this server expects a pre-shared key"))
@@ -157,9 +160,11 @@ func isLocalConn(nc net.Conn) bool {
 	return nc.RemoteAddr().Network() == "unix"
 }
 
-// handleAuth verifies the client's response to the previously issued
-// challenge nonce. It reports whether the connection is now authenticated.
-func (c *conn) handleAuth(req protocol.Request, nonce []byte) bool {
+// verifyAuth checks the client's response to the previously issued challenge
+// nonce and reports whether the connection is now authenticated. Failures are
+// answered inline; on success the caller sends the response after it has
+// registered the connection for broadcasts.
+func (c *conn) verifyAuth(req protocol.Request, nonce []byte) bool {
 	var params protocol.AuthParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
 		c.respondError(req.ID, fmt.Errorf("malformed auth params: %w", err))
@@ -180,7 +185,6 @@ func (c *conn) handleAuth(req protocol.Request, nonce []byte) bool {
 		c.respondError(req.ID, errors.New("authentication failed: pre-shared key mismatch"))
 		return false
 	}
-	c.respond(req.ID, struct{}{})
 	return true
 }
 
